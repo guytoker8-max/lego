@@ -181,7 +181,6 @@ class BuildPipeline:
             volume = self.optimizer.hollow(volume, shell=priority["shell"],
                                            lattice=priority["lattice"],
                                            keep_solid=priority["solid"])
-            volume = self.optimizer.ground_overhangs(volume)
             volume, bricks, palette = self._lay_and_ground(
                 volume, preset, detail, priority)
             # Count after repair, not before. Propping an overhang adds real
@@ -201,7 +200,7 @@ class BuildPipeline:
         return best
 
     def _lay_and_ground(self, volume, preset, detail: dict, priority: dict,
-                        rounds: int = 3):
+                        rounds: int = 8):
         """Tile, prop whatever came out hanging, and tile again.
 
         Two or three passes settle it: filling under a hanging brick puts
@@ -209,6 +208,9 @@ class BuildPipeline:
         hanging than the last.
         """
         bricks, palette = self._lay_bricks(volume, preset, detail, priority)
+        # ``ground_bricks`` supersedes the cell-level pass: it knows the
+        # footprints, so it props what actually hangs and nothing else.
+        # Running both double-props, and every extra cell is extra pieces.
         for _ in range(rounds):
             volume, filled = self.optimizer.ground_bricks(
                 volume, bricks, self.library)
@@ -234,7 +236,6 @@ class BuildPipeline:
         generator = BrickGenerator(self.library, palette,
                                    stagger=priority["stagger"])
         cids = generator._match_colors(volume)
-        cids = self.optimizer.unify_hidden(volume, cids)
         cids = self.optimizer.despeckle(cids, volume.solid,
                                         threshold=detail["despeckle"])
         cids = self.optimizer.merge_short_runs(cids, volume.solid,

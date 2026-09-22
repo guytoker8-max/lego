@@ -48,11 +48,19 @@ DETAIL_MODIFIERS = {
 }
 
 # How the appearance/strength answer moves the build.
+#
+# The lattice spacing matters far less than it looks like it should. Hollowing
+# saves cells, but every cell it removes from under the skin leaves a brick
+# with nothing to rest on, and the support pass puts most of them back: on a
+# test photograph a hollow volume went 666 cells -> 1197 after grounding,
+# landing within 1% of the solid build's piece count. So this is a weight and
+# material dial, not a cost one. A wider lattice is kept as the default
+# because it is marginally lighter and marginally cheaper.
 PRIORITY_MODIFIERS = {
-    # shell: how thick the skin is; lattice: spacing of internal walls
+    # shell: how thick the skin is; lattice: spacing of the internal walls
     "appearance": {"shell": 1, "lattice": 6, "solid": False, "stagger": True},
-    "balanced":   {"shell": 1, "lattice": 4, "solid": False, "stagger": True},
-    "strength":   {"shell": 2, "lattice": 3, "solid": False, "stagger": True},
+    "balanced":   {"shell": 1, "lattice": 6, "solid": False, "stagger": True},
+    "strength":   {"shell": 2, "lattice": 4, "solid": False, "stagger": True},
 }
 
 

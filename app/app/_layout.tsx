@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="model/[id]/index" options={{ title: 'Your set' }} />
         <Stack.Screen name="model/[id]/instructions" options={{ title: 'Instructions' }} />
         <Stack.Screen name="model/[id]/parts" options={{ title: 'Parts list' }} />
+        <Stack.Screen name="model/[id]/edit" options={{ title: 'Change this set' }} />
         <Stack.Screen name="model/[id]/order" options={{ title: 'Make my set' }} />
         <Stack.Screen name="order/[id]" options={{ title: 'Your order' }} />
         <Stack.Screen name="sets" options={{ title: 'My sets' }} />

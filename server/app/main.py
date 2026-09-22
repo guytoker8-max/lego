@@ -23,6 +23,7 @@ from .config import SETTINGS, PRESETS_BY_KEY
 from .library import LIBRARY, color_by_id
 from .library.suppliers import REGISTRY
 from .models import BrickModel
+from .pipeline.editor import ModelEditor
 from .pipeline.geometry import EmptySilhouetteError
 from .pipeline.orders import OrderService, STATUSES
 from .pipeline.preview import thumbnail
@@ -42,6 +43,7 @@ app.add_middleware(
 STORE = Store(SETTINGS.data_dir)
 PIPELINE = BuildPipeline(api_key=SETTINGS.anthropic_api_key or None)
 ORDERS = OrderService(STORE, supplier_key=SETTINGS.supplier)
+EDITOR = ModelEditor(api_key=SETTINGS.anthropic_api_key or None)
 
 # Analysis results held between the upload call and the build call.  Small,
 # short-lived, and re-derivable from the uploads if the process restarts.
@@ -228,6 +230,129 @@ def get_geometry(model_id: str):
     }
 
 
+@app.post("/api/models/{model_id}/edit")
+def edit_model(model_id: str, body: dict):
+    """Change an existing set. The set keeps its identity and gains a version.
+
+    Nothing here generates a new model from scratch: a recolour edits the
+    structured model in place, and a size or detail change rebuilds it from
+    the same reference photos with different answers. Either way the parts
+    list and the booklet are regenerated from the result, so they cannot
+    drift from what the preview shows.
+    """
+    instruction = (body or {}).get("instruction", "")
+    record = _record(model_id)
+    answers = dict(record.get("model", {}).get("source", {}).get("answers", {}))
+
+    plan = EDITOR.parse(instruction, answers)
+    if plan.is_empty:
+        raise HTTPException(
+            422, "I couldn't tell what to change from that. Try something "
+                 "like 'make it bigger', 'use fewer pieces' or 'make the "
+                 "roof red'.")
+
+    job_id = STORE.new_job()
+    STORE.save_job({"id": job_id, "status": "building", "stage": "planning",
+                    "message": "Applying your changes...", "progress": 0.15,
+                    "plan": plan.to_dict(), "model_id": model_id})
+
+    def run():
+        try:
+            if plan.needs_rebuild:
+                result = _rebuild(record, plan, answers, job_id)
+            else:
+                result = _recolour(record, plan)
+        except (EmptySilhouetteError, UnbuildableError,
+                InconsistentModelError, NoUsableReferenceError) as exc:
+            STORE.save_job({"id": job_id, "status": "failed", "error": str(exc),
+                            "recoverable": True, "progress": 1.0,
+                            "plan": plan.to_dict()})
+            return
+        except Exception:
+            log.exception("edit failed")
+            STORE.save_job({"id": job_id, "status": "failed",
+                            "error": "The change could not be applied.",
+                            "recoverable": True, "progress": 1.0,
+                            "plan": plan.to_dict()})
+            return
+
+        STORE.save_job({"id": job_id, "status": "done", "stage": "done",
+                        "message": "Your set has been updated.", "progress": 1.0,
+                        "model_id": model_id, "summary": result["summary"],
+                        "plan": plan.to_dict(),
+                        "warnings": result.get("warnings", [])})
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"job_id": job_id, "model_id": model_id, "plan": plan.to_dict()}
+
+
+def _rebuild(record: dict, plan, answers: dict, job_id: str) -> dict:
+    """Run the pipeline again over the same photos with changed answers."""
+    paths = record.get("references") or []
+    if not paths or not all(os.path.exists(p) for p in paths):
+        raise NoUsableReferenceError(
+            "The original photos are no longer available, so this set cannot "
+            "be resized. Creating a new set from the photo will work.")
+
+    def emit(stage, message, progress):
+        STORE.save_job({"id": job_id, "status": "building", "stage": stage,
+                        "message": message, "progress": progress,
+                        "plan": plan.to_dict(),
+                        "model_id": record["id"]})
+
+    analysis, views = PIPELINE.analyze(paths)
+    result = PIPELINE.build(views, analysis, EDITOR.answers_for(plan, answers),
+                            emit)
+    _save_version(record, result, plan)
+    return result
+
+
+def _recolour(record: dict, plan) -> dict:
+    """Repaint part of the model without moving anything."""
+    model = BrickModel.from_dict(record["model"])
+    changed = EDITOR.recolour(model, plan.recolour)
+
+    # Moving no bricks cannot break the structure, but the claim is cheap to
+    # check and expensive to be wrong about, so it is checked.
+    report = PIPELINE.validator.validate_and_repair(model)
+    if not report.ok:
+        raise UnbuildableError("The recoloured model no longer validates.",
+                               report.to_dict())
+    PIPELINE.instructions.generate(model)
+    result = PIPELINE.package(model)
+    result["warnings"] = (["Nothing matched that part of the model."]
+                          if changed == 0 else [])
+    _save_version(record, result, plan)
+    return result
+
+
+def _save_version(record: dict, result: dict, plan) -> None:
+    """Keep the set's identity and its history; replace its current model."""
+    versions = list(record.get("versions", []))
+    versions.append({
+        "fingerprint": record.get("model", {}).get("fingerprint"),
+        "piece_count": record.get("summary", {}).get("piece_count"),
+        "at": record.get("updated_at"),
+        "change": ", ".join(plan.understood) or "edited",
+    })
+    record["model"] = result["model"]
+    record["summary"] = result["summary"]
+    record["versions"] = versions[-20:]
+    try:
+        thumbnail(BrickModel.from_dict(result["model"])).save(
+            STORE.preview_path(record["id"]))
+    except Exception:
+        log.warning("could not refresh the preview for %s", record["id"])
+    STORE.save_model(record["id"], record)
+
+
+@app.get("/api/models/{model_id}/versions")
+def get_versions(model_id: str):
+    record = _record(model_id)
+    return {"current": record.get("summary", {}),
+            "versions": list(reversed(record.get("versions", [])))}
+
+
 @app.get("/api/models/{model_id}/preview")
 def get_preview(model_id: str):
     """A rendered still of the model, for lists and sharing."""
@@ -328,6 +453,13 @@ def advance_order(order_id: str, body: dict):
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
+def _record(model_id: str) -> dict:
+    try:
+        return STORE.get_model(model_id)
+    except NotFound:
+        raise HTTPException(404, "No such model.") from None
+
 
 def _load(model_id: str) -> BrickModel:
     try:

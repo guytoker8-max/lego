@@ -295,3 +295,97 @@ def test_missing_inventory_blocks_the_order():
                        bricks=[PlacedBrick("3005", 4, i, 0, 0) for i in range(8)])
     lines = inventory.bill_of_materials(model)
     assert inventory.check_availability(lines)
+
+
+# ---------------------------------------------------------------------------
+# editing an existing set (phase 3)
+# ---------------------------------------------------------------------------
+
+from app.pipeline.editor import ModelEditor          # noqa: E402
+
+CURRENT = {"size": "medium", "detail": "balanced", "priority": "balanced"}
+
+
+@pytest.fixture(scope="session")
+def editor():
+    return ModelEditor(api_key=None)
+
+
+@pytest.mark.parametrize("phrase,field,value", [
+    ("Make it bigger.", "size", "large"),
+    ("make it smaller", "size", "small"),
+    ("make it small", "size", "small"),
+    ("Use fewer pieces.", "detail", "simple"),
+    ("Make it easier to build.", "detail", "simple"),
+    ("add more detail", "detail", "detailed"),
+    ("Make it stronger.", "priority", "strength"),
+])
+def test_plain_language_maps_to_a_build_parameter(editor, phrase, field, value):
+    plan = editor.parse(phrase, CURRENT)
+    assert getattr(plan, field) == value
+    assert plan.needs_rebuild
+
+
+def test_a_colour_change_does_not_trigger_a_rebuild(editor):
+    plan = editor.parse("Make the roof red.", CURRENT)
+    assert not plan.needs_rebuild
+    assert plan.recolour == [{"region": "top", "color_id": 4}]
+
+
+def test_two_regions_in_one_sentence_keep_their_own_colours(editor):
+    plan = editor.parse("make the base dark blue and the top yellow", CURRENT)
+    got = {c["region"]: c["color_id"] for c in plan.recolour}
+    assert got["bottom"] != got["top"]
+    assert len(got) == 2
+
+
+def test_a_request_it_cannot_express_is_reported_not_approximated(editor):
+    plan = editor.parse("give it a hat", CURRENT)
+    assert plan.is_empty
+    assert plan.not_understood
+
+
+def test_recolour_only_repaints_the_named_region(editor):
+    bricks = [PlacedBrick("3005", 15, 0, y, 0) for y in range(0, 30, 3)]
+    model = BrickModel(name="tower", bricks=bricks)
+    changed = editor.recolour(model, [{"region": "top", "color_id": 4}])
+    assert changed > 0
+    assert changed < len(bricks), "the whole model was repainted, not the top"
+    top = [b for b in model.bricks if b.y >= 21]
+    assert all(b.color_id == 4 for b in top)
+    assert model.bricks[0].color_id == 15
+
+
+def test_recolour_refuses_a_colour_no_one_stocks(editor):
+    model = BrickModel(name="t", bricks=[PlacedBrick("3005", 15, 0, 0, 0)])
+    assert editor.recolour(model, [{"region": "all", "color_id": 99999}]) == 0
+    assert model.bricks[0].color_id == 15
+
+
+def test_recolouring_never_breaks_the_structure(built):
+    """Nothing moves, so it cannot -- but the promise is worth a test."""
+    model = BrickModel.from_dict(built["model"])
+    ModelEditor(api_key=None).recolour(model, [{"region": "all", "color_id": 4}])
+    assert StructuralValidator().validate(model).ok
+
+
+def test_an_edit_keeps_the_parts_list_matching(built):
+    model = BrickModel.from_dict(built["model"])
+    ModelEditor(api_key=None).recolour(model, [{"region": "top", "color_id": 4}])
+    inventory = PartsInventory()
+    assert inventory.reconcile(model, inventory.bill_of_materials(model)) == []
+
+
+def test_an_edit_changes_the_fingerprint(built):
+    model = BrickModel.from_dict(built["model"])
+    before = model.fingerprint()
+    ModelEditor(api_key=None).recolour(model, [{"region": "top", "color_id": 4}])
+    assert model.fingerprint() != before
+
+
+def test_answers_for_only_changes_what_was_asked(editor):
+    plan = editor.parse("make it bigger", CURRENT)
+    answers = editor.answers_for(plan, CURRENT)
+    assert answers["size"] == "large"
+    assert answers["detail"] == CURRENT["detail"]
+    assert answers["priority"] == CURRENT["priority"]

@@ -122,6 +122,8 @@ export default function ModelScreen() {
                 onPress={() => router.push({ pathname: '/model/[id]/instructions', params: { id } })} />
         <Button label="Parts list" tone="secondary"
                 onPress={() => router.push({ pathname: '/model/[id]/parts', params: { id } })} />
+        <Button label="Change this set" tone="secondary"
+                onPress={() => router.push({ pathname: '/model/[id]/edit', params: { id } })} />
         <Button label="Make My Set" tone="secondary"
                 onPress={() => router.push({ pathname: '/model/[id]/order', params: { id } })} />
 

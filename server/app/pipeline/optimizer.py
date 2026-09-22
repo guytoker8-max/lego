@@ -8,11 +8,6 @@ are most of the cost and most of the build time.  Real sets are shells.  We
 keep the visible skin, run an internal lattice so the shell has something to
 hold on to, and throw the rest away.
 
-*Hidden colour.*  A brick behind the skin can be any colour at all, so it is
-whatever is cheapest and most plentiful.  This is also what lets the skin
-tile into long bricks: without it, a hidden cell in an odd colour splits the
-run above it.
-
 *Colour despeckling.*  Shrinking a photo leaves single odd cells along every
 edge -- one stray green stud between blue and white.  Each becomes a 1x1, the
 priciest way to buy a stud.  A lone cell is swapped to its neighbours' colour
@@ -30,9 +25,6 @@ import numpy as np
 from ..library import DEFAULT_COLORS, ColorLibrary
 from ..vendor.legoize import palette as _lego
 from .geometry import Volume
-
-BULK_COLOR_ID = 71        # Light Bluish Gray: the cheapest, most plentiful
-
 
 class BrickOptimizer:
     def __init__(self, colors: ColorLibrary = DEFAULT_COLORS):
@@ -228,16 +220,6 @@ class BrickOptimizer:
                 if d <= threshold:
                     line[start:after_i] = before
 
-    def unify_hidden(self, volume: Volume, cids: np.ndarray,
-                     bulk_id: int = BULK_COLOR_ID) -> np.ndarray:
-        """Paint everything that cannot be seen one cheap colour."""
-        if not self.colors.exists(bulk_id):
-            bulk_id = self.colors.colors[0].id
-        hidden = volume.solid & ~volume.visible()
-        out = cids.copy()
-        out[hidden] = bulk_id
-        return out
-
     # ---- colour level ----------------------------------------------------
 
     def despeckle(self, cids: np.ndarray, solid: np.ndarray,
@@ -257,7 +239,10 @@ class BrickOptimizer:
             neigh = _neighbour_ids(out, solid)
             for (x, y, z), (best_id, count) in neigh.items():
                 mine = int(out[x, y, z])
-                if best_id == mine or count < 4:
+                # Three of six neighbours is already a clear majority in a
+                # shell, where two of the six are usually air. Requiring four
+                # meant this pass almost never fired.
+                if best_id == mine or count < 3:
                     continue
                 if mine not in lab or best_id not in lab:
                     continue

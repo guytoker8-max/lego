@@ -59,6 +59,7 @@ something you can actually put in a box.
 | Instructions | `pipeline/instructions.py` | A booklet whose every step rests on the last |
 | Parts | `pipeline/inventory.py` | The bill of materials, counted from the model |
 | Pricing | `pipeline/pricing.py` | A price traced to that bill |
+| Editing | `pipeline/editor.py` | Plain-language changes to a set that already exists |
 | Orders | `pipeline/orders.py` | The kit, through whichever supplier is configured |
 
 Two libraries sit underneath: `library/bricks.py` is the only source of
@@ -106,6 +107,31 @@ into a fingerprint that the model, parts and steps endpoints all carry, the
 instructions screen refuses to open if the two it fetched disagree, and the
 order route refuses a set whose list and model do not reconcile.
 
+## Changing a set you already have
+
+"Make it bigger." "Use fewer pieces." "Make the roof red." "Make it stronger."
+
+An edit never generates a fresh model. There are two paths, and which one runs
+depends on what changed:
+
+- **Recolour** edits the structured model in place. Nothing moves, so the
+  structure is untouched — and it is re-validated anyway, because "cannot
+  fail" is a claim better checked than trusted.
+- **Rebuild** (size, detail, strength) runs the pipeline again over the same
+  reference photos with different answers. A bigger model is not a scaled
+  copy of a smaller one; it is a different tiling of a finer grid, so there is
+  nothing to scale.
+
+Either way the set keeps its identity, gains a version in its history, and
+the parts list, booklet, preview and price are regenerated from the result.
+
+Instructions are parsed by Claude when a key is configured and by keyword
+otherwise. The fallback handles combined requests ("make the base dark blue
+and the top yellow" colours two different regions) and reports what it
+understood before anything is applied, so a misread is visible rather than
+sat through. A request it cannot express — "give it a hat" — is refused with
+a suggestion rather than approximated.
+
 ## Size presets
 
 | Preset | Piece budget | Max dimension | Colours |
@@ -123,15 +149,17 @@ fits. "Small" therefore means small.
 ## Testing
 
 ```bash
-cd server && python -m pytest tests/ -q     # 28 tests
+cd server && python -m pytest tests/ -q     # 44 tests
 cd app && npx tsc --noEmit                  # typecheck
 ```
 
 The suite is weighted toward the promise rather than the plumbing: that models
 validate, that no two bricks overlap, that the parts list reconciles exactly,
 that every step rests on the last, that presets respect their budgets, that
-prices add up, and that bad input — a text file, a blank frame, a blurry photo,
-two objects, a subject too small to resolve — fails in a way a person can act on.
+prices add up, that an edit keeps the parts list matching and cannot ask for a
+colour nobody stocks, and that bad input — a text file, a blank frame, a blurry
+photo, two objects, a subject too small to resolve — fails in a way a person
+can act on.
 
 ## What is built, and what is not
 
@@ -139,13 +167,14 @@ Phases 1 and 2 of the brief are complete and working end to end: upload,
 analysis, questions, a structured brick model, 3D preview, physical validation,
 instructions and the parts list.
 
-Phases 3 and 4 have their seams in place but are not finished:
+Phase 3 is partly done: editing and version history work (see above), and
+multiple reference photos are supported end to end. What is left:
 
 - **No accounts.** Models are stored per install, in `Store`, which is the
   only class that touches the disk — swapping it for Postgres is one class.
-- **No model editing yet.** "Make it bigger", "use fewer pieces" would re-run
-  the pipeline with changed answers against the same references; the pipeline
-  already takes them as parameters.
+
+Phase 4 has its seams in place but is not finished:
+
 - **Payment is not connected.** `PaymentProvider` is an interface with a
   deferred stub behind it. No card detail is accepted anywhere in the app.
 - **Fulfilment is not contracted.** Of the three supplier routes, only
@@ -154,12 +183,26 @@ Phases 3 and 4 have their seams in place but are not finished:
 
 ## Known limitations
 
-- **Single studs dominate the piece mix** — roughly 60–70% on a photographic
-  subject. A photo reduced to a stud grid leaves short colour runs along every
-  boundary, and a short run is bought as 1x1s. The palette reduction, the
-  despeckler and the run merger cut this a long way from where it started, but
-  it remains the clearest thing left to improve: it drives both cost and build
-  time.
+- **Single studs are still the largest share of the piece mix** — 58% on a
+  simple build, 71% on a detailed one. A photo reduced to a stud grid leaves
+  short colour runs along every boundary, and a short run is bought as 1x1s.
+
+  Most of the way there was one mistake, worth recording because it looked
+  like an optimisation. Cells hidden inside the model were being painted a
+  single cheap grey, on the reasoning that an invisible brick may as well be
+  the cheapest one. But the colour of a photographic subject happens to be
+  constant along the depth axis, so a full-depth column was a single colour
+  and tiled into one long brick — until the grey split it into skin, grey
+  core, skin. Removing that pass cut a test model from 2,169 pieces to about
+  1,620 and its price by 17%.
+
+  Hollowing turned out to be near-neutral for the same underlying reason:
+  every cell removed from under the skin leaves a brick with nothing to rest
+  on, and the support pass puts most of them back. It is a weight dial, not a
+  cost one.
+
+  What remains is genuine colour variation in the photograph, which the detail
+  setting already exposes to the user as a trade against fidelity.
 - **Depth from a single photo is an interpretation**, and the app says so
   rather than implying a scan.
 - **`query-string` is pinned directly** in `app/package.json`. `expo-router`

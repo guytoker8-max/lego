@@ -186,6 +186,27 @@ export const listModels = () =>
 /** Absolute URL of a model's rendered still, for <Image source>. */
 export const previewUrl = (id: string) => `${BASE}/api/models/${id}/preview`;
 
+export type EditPlan = {
+  size: string | null; detail: string | null; priority: string | null;
+  recolour: { region: string; color_id: number }[];
+  understood: string[]; not_understood: string[]; needs_rebuild: boolean;
+};
+
+export const editModel = (id: string, instruction: string) =>
+  request<{ job_id: string; model_id: string; plan: EditPlan }>(
+    `/api/models/${id}/edit`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction }),
+    },
+  );
+
+export const getVersions = (id: string) =>
+  request<{ current: Summary;
+            versions: { change: string; piece_count: number }[] }>(
+    `/api/models/${id}/versions`);
+
 export const createOrder = (modelId: string, shipping: string) =>
   request<{ order: Order; payment: { status: string; message: string } }>(
     '/api/orders',
