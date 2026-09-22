@@ -1,0 +1,307 @@
+"""Small image routines the pipeline needs, in numpy and Pillow only.
+
+Deliberately dependency-light: these run on the API box, and pulling OpenCV
+in for a flood fill and a distance transform is not worth the install.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from PIL import Image, ImageFilter
+
+
+def load_rgb(path, max_side: int = 900) -> np.ndarray:
+    """Open an image, respect EXIF rotation, cap its size, return RGB uint8."""
+    img = Image.open(path)
+    try:
+        from PIL import ImageOps
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        pass
+    img = img.convert("RGB")
+    if max(img.size) > max_side:
+        scale = max_side / max(img.size)
+        img = img.resize((max(1, int(img.width * scale)),
+                          max(1, int(img.height * scale))), Image.LANCZOS)
+    return np.asarray(img, dtype=np.uint8)
+
+
+def sharpness(rgb: np.ndarray) -> float:
+    """Variance of a Laplacian: low means the photo is blurry or out of focus."""
+    g = rgb.astype(np.float32).mean(axis=2)
+    lap = (-4 * g
+           + np.roll(g, 1, 0) + np.roll(g, -1, 0)
+           + np.roll(g, 1, 1) + np.roll(g, -1, 1))[1:-1, 1:-1]
+    return float(lap.var())
+
+
+def subject_mask(rgb: np.ndarray, tolerance: float = 34.0) -> np.ndarray:
+    """The subject, as a single region. See ``segment`` for the blob count."""
+    return segment(rgb, tolerance)[0]
+
+
+def segment(rgb: np.ndarray, tolerance: float = 34.0) -> tuple:
+    """Separate the subject from its background.
+
+    Returns (mask, blob_count): the largest region, and how many distinct
+    regions were found before picking it.
+
+
+    Photos of a *thing* almost always put the thing in the middle against a
+    more uniform surround, so we flood the background inward from the border
+    and keep what the flood cannot reach.  Where that fails -- a busy scene,
+    a subject that runs off the edge -- we fall back to a centre-weighted
+    colour-distance cut, which at least keeps the middle of the frame.
+    """
+    h, w = rgb.shape[:2]
+    lab = _to_lab(rgb)
+
+    # --- border flood -----------------------------------------------------
+    border = np.zeros((h, w), dtype=bool)
+    border[0, :] = border[-1, :] = True
+    border[:, 0] = border[:, -1] = True
+    seed_colors = lab[border]
+    # A handful of representative border colours beats the single mean when
+    # the background is, say, grass at the bottom and sky at the top.
+    refs = _kmeans(seed_colors, k=3, iters=8)
+
+    dist = np.min(
+        np.stack([np.linalg.norm(lab - r, axis=2) for r in refs], axis=0), axis=0
+    )
+    bg_like = dist < tolerance
+    background = _flood_from_border(bg_like)
+    mask = ~background
+
+    mask = _close(mask)
+    # Count the separate blobs *before* reducing to one, or the count is
+    # always one and "there is more than one object here" can never be said.
+    blobs = component_count(mask)
+    mask = _largest_component(mask)
+
+    coverage = mask.mean()
+    if coverage < 0.02 or coverage > 0.97:
+        fallback = _close(_centre_cut(lab))
+        blobs = component_count(fallback)
+        mask = _largest_component(fallback)
+    return mask, blobs
+
+
+def component_count(mask: np.ndarray, min_fraction: float = 0.02) -> int:
+    """How many separate blobs of subject there are, ignoring specks.
+
+    More than one usually means the photo holds more than one object, which
+    is a thing we ask the user about rather than guess at.
+    """
+    labels, sizes = _label(mask)
+    big = [s for s in sizes.values() if s >= mask.size * min_fraction]
+    return len(big)
+
+
+def dominant_colors(rgb: np.ndarray, mask: np.ndarray, k: int = 6) -> list:
+    """The k colours that describe the subject, most common first."""
+    pts = rgb[mask]
+    if len(pts) == 0:
+        return []
+    if len(pts) > 20000:
+        pts = pts[np.random.default_rng(7).choice(len(pts), 20000, replace=False)]
+    lab = _rgb_to_lab_flat(pts.astype(np.float32))
+    centers = _kmeans(lab, k=k, iters=12)
+    d = np.stack([np.linalg.norm(lab - c, axis=1) for c in centers], axis=0)
+    assign = d.argmin(axis=0)
+    out = []
+    for i in range(len(centers)):
+        sel = pts[assign == i]
+        if len(sel) == 0:
+            continue
+        out.append((tuple(int(v) for v in sel.mean(axis=0)), len(sel) / len(pts)))
+    out.sort(key=lambda t: -t[1])
+    return out
+
+
+def distance_inside(mask: np.ndarray) -> np.ndarray:
+    """Chamfer distance from each subject pixel to the nearest edge.
+
+    Drives the depth profile: the middle of a shape bulges toward the viewer,
+    the rim tapers off.
+    """
+    INF = 1e9
+    d = np.where(mask, INF, 0.0).astype(np.float32)
+    h, w = d.shape
+    # forward pass
+    for y in range(h):
+        row = d[y]
+        prev = d[y - 1] if y > 0 else None
+        for_x = row.copy()
+        if prev is not None:
+            for_x = np.minimum(for_x, prev + 1.0)
+            for_x[1:] = np.minimum(for_x[1:], prev[:-1] + 1.4142)
+            for_x[:-1] = np.minimum(for_x[:-1], prev[1:] + 1.4142)
+        d[y] = for_x
+        for x in range(1, w):
+            if d[y, x] > d[y, x - 1] + 1.0:
+                d[y, x] = d[y, x - 1] + 1.0
+    # backward pass
+    for y in range(h - 1, -1, -1):
+        row = d[y]
+        nxt = d[y + 1] if y < h - 1 else None
+        back = row.copy()
+        if nxt is not None:
+            back = np.minimum(back, nxt + 1.0)
+            back[1:] = np.minimum(back[1:], nxt[:-1] + 1.4142)
+            back[:-1] = np.minimum(back[:-1], nxt[1:] + 1.4142)
+        d[y] = back
+        for x in range(w - 2, -1, -1):
+            if d[y, x] > d[y, x + 1] + 1.0:
+                d[y, x] = d[y, x + 1] + 1.0
+    d[~mask] = 0.0
+    return d
+
+
+def crop_to_mask(rgb: np.ndarray, mask: np.ndarray, pad: int = 2) -> tuple:
+    ys, xs = np.nonzero(mask)
+    if len(ys) == 0:
+        return rgb, mask
+    y0, y1 = max(0, ys.min() - pad), min(mask.shape[0], ys.max() + 1 + pad)
+    x0, x1 = max(0, xs.min() - pad), min(mask.shape[1], xs.max() + 1 + pad)
+    return rgb[y0:y1, x0:x1], mask[y0:y1, x0:x1]
+
+
+def resize_mask(mask: np.ndarray, w: int, h: int, threshold: float = 0.42) -> np.ndarray:
+    """Shrink a mask to a stud grid.  A cell is filled if enough of it was."""
+    img = Image.fromarray((mask * 255).astype(np.uint8))
+    small = np.asarray(img.resize((w, h), Image.BOX), dtype=np.float32) / 255.0
+    return small >= threshold
+
+
+def resize_rgb(rgb: np.ndarray, w: int, h: int) -> np.ndarray:
+    return np.asarray(Image.fromarray(rgb).resize((w, h), Image.LANCZOS),
+                      dtype=np.uint8)
+
+
+def symmetry_score(mask: np.ndarray) -> float:
+    """How closely the silhouette mirrors left to right: 1.0 is perfect."""
+    flipped = mask[:, ::-1]
+    inter = np.logical_and(mask, flipped).sum()
+    union = np.logical_or(mask, flipped).sum()
+    return float(inter / union) if union else 0.0
+
+
+# ---------------------------------------------------------------------------
+# internals
+# ---------------------------------------------------------------------------
+
+def _to_lab(rgb: np.ndarray) -> np.ndarray:
+    flat = _rgb_to_lab_flat(rgb.reshape(-1, 3).astype(np.float32))
+    return flat.reshape(rgb.shape[0], rgb.shape[1], 3)
+
+
+def _rgb_to_lab_flat(rgb: np.ndarray) -> np.ndarray:
+    srgb = rgb / 255.0
+    lin = np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4)
+    m = np.array([[0.4124564, 0.3575761, 0.1804375],
+                  [0.2126729, 0.7151522, 0.0721750],
+                  [0.0193339, 0.1191920, 0.9503041]], dtype=np.float32)
+    xyz = lin @ m.T
+    white = np.array([0.95047, 1.0, 1.08883], dtype=np.float32)
+    t = xyz / white
+    eps = (6 / 29) ** 3
+    f = np.where(t > eps, np.cbrt(t), t / (3 * (6 / 29) ** 2) + 4 / 29)
+    L = 116 * f[..., 1] - 16
+    a = 500 * (f[..., 0] - f[..., 1])
+    b = 200 * (f[..., 1] - f[..., 2])
+    return np.stack([L, a, b], axis=-1)
+
+
+def _kmeans(points: np.ndarray, k: int = 3, iters: int = 8) -> np.ndarray:
+    pts = points.reshape(-1, points.shape[-1])
+    if len(pts) == 0:
+        return np.zeros((k, points.shape[-1]), dtype=np.float32)
+    k = min(k, len(pts))
+    rng = np.random.default_rng(11)
+    centers = pts[rng.choice(len(pts), k, replace=False)].astype(np.float32)
+    for _ in range(iters):
+        d = np.linalg.norm(pts[:, None, :] - centers[None, :, :], axis=2)
+        assign = d.argmin(axis=1)
+        for i in range(k):
+            sel = pts[assign == i]
+            if len(sel):
+                centers[i] = sel.mean(axis=0)
+    return centers
+
+
+def _flood_from_border(passable: np.ndarray) -> np.ndarray:
+    """Reachable-from-the-border set, by iterative dilation (vectorised BFS)."""
+    h, w = passable.shape
+    reached = np.zeros_like(passable)
+    reached[0, :] = passable[0, :]
+    reached[-1, :] = passable[-1, :]
+    reached[:, 0] = passable[:, 0]
+    reached[:, -1] = passable[:, -1]
+    while True:
+        grown = reached.copy()
+        grown[1:, :] |= reached[:-1, :]
+        grown[:-1, :] |= reached[1:, :]
+        grown[:, 1:] |= reached[:, :-1]
+        grown[:, :-1] |= reached[:, 1:]
+        grown &= passable
+        if grown.sum() == reached.sum():
+            return reached
+        reached = grown
+
+
+def _close(mask: np.ndarray, radius: int = 2) -> np.ndarray:
+    """Fill pinholes and bridge one-pixel gaps: dilate then erode."""
+    img = Image.fromarray((mask * 255).astype(np.uint8))
+    img = img.filter(ImageFilter.MaxFilter(radius * 2 + 1))
+    img = img.filter(ImageFilter.MinFilter(radius * 2 + 1))
+    return np.asarray(img, dtype=np.uint8) > 127
+
+
+def _label(mask: np.ndarray) -> tuple:
+    """Connected components, 4-connected, by repeated dilation of seeds."""
+    remaining = mask.copy()
+    labels = np.zeros(mask.shape, dtype=np.int32)
+    sizes = {}
+    current = 0
+    while remaining.any():
+        current += 1
+        ys, xs = np.nonzero(remaining)
+        seed = np.zeros_like(remaining)
+        seed[ys[0], xs[0]] = True
+        while True:
+            grown = seed.copy()
+            grown[1:, :] |= seed[:-1, :]
+            grown[:-1, :] |= seed[1:, :]
+            grown[:, 1:] |= seed[:, :-1]
+            grown[:, :-1] |= seed[:, 1:]
+            grown &= remaining
+            if grown.sum() == seed.sum():
+                break
+            seed = grown
+        labels[seed] = current
+        sizes[current] = int(seed.sum())
+        remaining &= ~seed
+        if current > 400:            # pathological input; stop counting
+            break
+    return labels, sizes
+
+
+def _largest_component(mask: np.ndarray) -> np.ndarray:
+    labels, sizes = _label(mask)
+    if not sizes:
+        return mask
+    best = max(sizes, key=sizes.get)
+    return labels == best
+
+
+def _centre_cut(lab: np.ndarray) -> np.ndarray:
+    """Fallback segmentation: what differs from the frame's border colour."""
+    h, w = lab.shape[:2]
+    border = np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])
+    ref = border.mean(axis=0)
+    dist = np.linalg.norm(lab - ref, axis=2)
+    yy, xx = np.mgrid[0:h, 0:w]
+    cy, cx = h / 2, w / 2
+    radial = np.sqrt(((yy - cy) / cy) ** 2 + ((xx - cx) / cx) ** 2)
+    score = dist * np.clip(1.4 - radial, 0.05, 1.4)
+    return score > max(12.0, np.percentile(score, 62))

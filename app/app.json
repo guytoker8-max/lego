@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "BrickSnap",
+    "slug": "bricksnap",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "bricksnap",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": { "resizeMode": "contain", "backgroundColor": "#FFCF3F" },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "BrickSnap needs your photos so it can turn one into a brick model.",
+        "NSCameraUsageDescription": "BrickSnap uses the camera to photograph the thing you want built."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "plugins": ["expo-router"],
+    "extra": { "apiUrl": "http://127.0.0.1:8000" }
+  }
+}

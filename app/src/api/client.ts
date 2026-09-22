@@ -1,0 +1,199 @@
+/**
+ * Everything the app knows about the server.
+ *
+ * Deliberately the only module that talks to it: screens call these
+ * functions and never build a URL. Errors come back as one `ApiError` with a
+ * message already fit to show a person, because a screen should not have to
+ * decide what a 413 means.
+ */
+
+import Constants from 'expo-constants';
+
+const BASE: string =
+  (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://127.0.0.1:8000';
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, init);
+  } catch {
+    // No status to report: the request never reached the server.
+    throw new ApiError(
+      'Could not reach BrickSnap. Check your connection and try again.',
+      0,
+    );
+  }
+  if (!res.ok) {
+    let detail = 'Something went wrong.';
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === 'string') detail = body.detail;
+    } catch {
+      /* server sent no JSON; the default message stands */
+    }
+    throw new ApiError(detail, res.status);
+  }
+  return (await res.json()) as T;
+}
+
+// ---- types ---------------------------------------------------------------
+
+export type SizePreset = {
+  key: string; label: string; width_studs: number; max_pieces: number;
+  max_dimension_cm: number; colors: number; detail: string;
+};
+
+export type Config = {
+  product_name: string;
+  branding: {
+    product_name: string; brick_term: string;
+    disclaimer: string; short_disclaimer: string; official_product: boolean;
+  };
+  size_presets: SizePreset[];
+  default_preset: string;
+  max_references: number;
+  max_upload_mb: number;
+  vision_enabled: boolean;
+};
+
+export type Question = {
+  id: string;
+  prompt: string;
+  options: { id: string; label: string; default?: boolean }[];
+};
+
+export type Job = {
+  id: string; status: string; stage?: string; message?: string;
+  progress?: number; questions?: Question[]; error?: string;
+  model_id?: string; summary?: Summary; warnings?: string[];
+  analysis?: { display_name: string; subject: string; warnings: string[];
+               confidence: number; source: string };
+};
+
+export type Summary = {
+  name: string; subject: string; piece_count: number; color_count: number;
+  dimensions_cm: number[]; weight_g: number; difficulty: string;
+  step_count: number; fingerprint: string;
+  build_time: { minutes: number; label: string };
+};
+
+export type Geometry = {
+  fingerprint: string;
+  size_studs: number[];
+  palette: Record<string, { name: string; hex: string }>;
+  parts: Record<string, { w: number; d: number; h: number; has_studs: boolean }>;
+  bricks: [string, number, number, number, number, number][];
+  steps: number[][];
+};
+
+export type PartLine = {
+  part_id: string; part_name: string; color_id: number; color_name: string;
+  color_hex: string; quantity: number; line_weight_g: number; line_cost: number;
+};
+
+export type Parts = {
+  fingerprint: string; total_pieces: number; distinct_parts: number;
+  distinct_colors: number; total_weight_g: number; lines: PartLine[];
+  mismatches: string[]; unavailable: { part_name: string; color_name: string }[];
+};
+
+export type Step = {
+  index: number; title: string; note: string; piece_count: number;
+  cumulative: number;
+  add: { quantity: number; part_name: string; color_name: string;
+         color_hex: string; label: string }[];
+  placements: { brick_index: number; part_id: string; color_hex: string;
+                x: number; y: number; z: number; rotation: number }[];
+};
+
+export type Price = {
+  currency: string; symbol: string; set_price: number; total: number;
+  production_days: number;
+  breakdown: Record<string, number>;
+  shipping_options: { key: string; label: string; cost: number; days: string }[];
+  shipping_selected: string;
+};
+
+export type Order = {
+  id: string; status: string; status_label: string; piece_count: number;
+  price: Price; tracking: { carrier?: string; number?: string };
+  steps: { key: string; label: string; done: boolean }[];
+};
+
+// ---- calls ---------------------------------------------------------------
+
+export const getConfig = () => request<Config>('/api/config');
+
+export async function uploadPhotos(
+  uris: string[], angles: string[] = [],
+): Promise<Job> {
+  const form = new FormData();
+  uris.forEach((uri, i) => {
+    const name = uri.split('/').pop() || `ref${i}.jpg`;
+    const ext = name.split('.').pop()?.toLowerCase();
+    form.append('files', {
+      uri,
+      name,
+      type: ext === 'png' ? 'image/png' : 'image/jpeg',
+    } as any);
+  });
+  if (angles.length) form.append('angles', angles.join(','));
+  return request<Job>('/api/jobs', { method: 'POST', body: form });
+}
+
+export const startBuild = (jobId: string, answers: Record<string, string>) =>
+  request<Job>(`/api/jobs/${jobId}/build`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(answers),
+  });
+
+export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`);
+
+export const getModel = (id: string) =>
+  request<{ summary: Summary; parts: Parts; steps: Step[]; price: Price;
+            validation: any; warnings: string[] }>(`/api/models/${id}`);
+
+export const getGeometry = (id: string) =>
+  request<Geometry>(`/api/models/${id}/geometry`);
+
+export const getParts = (id: string) => request<Parts>(`/api/models/${id}/parts`);
+
+export const getSteps = (id: string) =>
+  request<{ steps: Step[]; fingerprint: string }>(`/api/models/${id}/steps`);
+
+export const priceModel = (id: string, shipping: string) =>
+  request<Price>(`/api/models/${id}/price`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipping }),
+  });
+
+export const listModels = () =>
+  request<{ models: { id: string; name: string; piece_count: number;
+                      dimensions_cm: number[]; status: string;
+                      updated_at: number; thumbnail: string | null }[] }>(
+    '/api/models');
+
+/** Absolute URL of a model's rendered still, for <Image source>. */
+export const previewUrl = (id: string) => `${BASE}/api/models/${id}/preview`;
+
+export const createOrder = (modelId: string, shipping: string) =>
+  request<{ order: Order; payment: { status: string; message: string } }>(
+    '/api/orders',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_id: modelId, shipping }),
+    },
+  );
+
+export const getOrder = (id: string) => request<Order>(`/api/orders/${id}`);
