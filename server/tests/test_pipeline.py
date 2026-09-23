@@ -23,6 +23,7 @@ from app.pipeline.instructions import InstructionGenerator
 from app.pipeline.inventory import PartsInventory
 from app.pipeline.pricing import PricingEngine
 from app.pipeline.reference_analyzer import NoUsableReferenceError
+from app.config import SIZE_PRESETS
 from app.pipeline.runner import BuildPipeline
 from app.pipeline.validator import StructuralValidator
 
@@ -67,6 +68,32 @@ def test_every_catalog_part_has_real_dimensions():
         assert w > 0 and h > 0 and d > 0
         assert brick.weight_g > 0
         assert brick.base_cost > 0
+
+
+def test_every_size_preset_keeps_its_stated_dimensions(pipeline, tmp_path):
+    """A preset that says 42 cm has to mean it.
+
+    The layer count follows the photo's aspect, so for anything taller than
+    it is wide the height is what the width decides -- and a Display robot
+    came out 56 cm against a stated 42. A customer picking a size is being
+    told how big the thing on their shelf will be.
+    """
+    art = np.full((480, 240, 3), 245, dtype=np.uint8)
+    art[60:440, 60:180] = (196, 40, 47)          # tall and narrow
+    path = _write(tmp_path, "tall.png", art)
+
+    for preset in SIZE_PRESETS:
+        analysis, views = pipeline.analyze([path])
+        result = pipeline.build(views, analysis,
+                                {"size": preset.key, "detail": "simple",
+                                 "priority": "balanced"})
+        largest = max(result["summary"]["dimensions_cm"])
+        if largest > preset.max_dimension_cm + 0.5:
+            # Allowed only where the narrowest buildable width still
+            # overshoots, and only if the model says so out loud.
+            assert any("at most" in w for w in result["warnings"]), (
+                "%s came out %.1f cm against a stated %.1f, silently"
+                % (preset.key, largest, preset.max_dimension_cm))
 
 
 def test_generated_models_only_use_catalogued_parts(built):

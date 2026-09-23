@@ -28,6 +28,7 @@ import os
 import numpy as np
 from PIL import Image
 
+from ..config import DEFAULT_PRESET, SIZE_PRESETS
 from ..models import Analysis
 from . import imaging
 
@@ -197,14 +198,15 @@ class ReferenceAnalyzer:
         Size and detail always change it.  The unseen-back question only
         matters when we have a single view of something with real depth.
         """
+        # Built from the configured presets, not typed out again here: a
+        # preset nobody can choose is a preset that does not exist, and
+        # Display was exactly that.
+        sizes = [{"id": p.key, "label": p.label,
+                  **({"default": True} if p.key == DEFAULT_PRESET else {})}
+                 for p in SIZE_PRESETS]
         qs = [
             {"id": "size", "prompt": "How large should the finished model be?",
-             "options": [
-                 {"id": "mini", "label": "Mini"},
-                 {"id": "small", "label": "Small"},
-                 {"id": "medium", "label": "Medium", "default": True},
-                 {"id": "large", "label": "Large"},
-             ]},
+             "options": sizes},
             {"id": "detail", "prompt": "Maximum detail, or fewer pieces?",
              "options": [
                  {"id": "detailed", "label": "Detailed"},

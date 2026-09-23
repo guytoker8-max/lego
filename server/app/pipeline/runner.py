@@ -99,6 +99,17 @@ class BuildPipeline:
             library=self.library,
         )
 
+        largest = max(model.dimensions_cm)
+        if largest > preset.max_dimension_cm + 0.5:
+            # Only reachable for something far taller than it is wide, where
+            # the narrowest buildable width still overshoots. Saying so beats
+            # shipping a box a third bigger than the size that was picked.
+            model.source["analysis"].setdefault("warnings", []).append(
+                "%s is meant to be at most %g cm, but this shape is so tall "
+                "and narrow that the smallest buildable width still comes out "
+                "%.0f cm. A smaller size will not make it shorter."
+                % (preset.label, preset.max_dimension_cm, largest))
+
         emit("validating", "Checking stability...", 0.70)
         report = self.validator.validate_and_repair(model)
         if not report.ok:
@@ -259,13 +270,24 @@ class BuildPipeline:
         return self._tile(generator, volume, cids), palette
 
     def _width_for_dimension(self, view, preset: SizePreset) -> int:
-        """Cap the width so the model also fits the preset's centimetres."""
+        """Cap the width so the model also fits the preset's centimetres.
+
+        For anything taller than it is wide the height is what binds, and the
+        two are locked together: the layer count follows the photo's aspect,
+        so the finished height in millimetres is width_studs / aspect * the
+        stud pitch, whatever the brick pitch is. Solving that for the width is
+        the whole cap. A Display robot came out 56 cm against a stated 42.
+        """
         from ..library import STUD_MM
-        by_mm = int(preset.max_dimension_cm * 10 / STUD_MM)
+        limit = preset.max_dimension_cm * 10.0
+        by_width = limit / STUD_MM
         aspect = view.aspect
         if aspect < 1.0:                      # taller than wide: height binds
-            by_mm = int(by_mm * aspect * 1.2)
-        return max(8, min(preset.width_studs, by_mm))
+            by_width = min(by_width, limit * aspect / STUD_MM)
+        # Four studs is about the narrowest thing that still tiles into
+        # bricks rather than a stack of 1x1s. Below that the cap cannot be
+        # honoured, and ``build`` says so rather than quietly overshooting.
+        return max(4, min(preset.width_studs, int(by_width)))
 
     @staticmethod
     def _tile(generator: BrickGenerator, volume, cids) -> list:
