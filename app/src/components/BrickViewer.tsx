@@ -20,7 +20,6 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
 import { GLView } from 'expo-gl';
 import * as THREE from 'three';
-import { Renderer } from 'expo-three';
 
 import type { Geometry } from '@/api/client';
 
@@ -149,13 +148,28 @@ export default function BrickViewer({
 
   const onContextCreate = useCallback(
     async (gl: any) => {
-      // expo-three's Renderer *is* a WebGLRenderer at runtime; its published
-      // types omit the inherited surface, so it is narrowed back here rather
-      // than every call site being cast.
-      const renderer = new Renderer({ gl }) as unknown as THREE.WebGLRenderer;
       const width = gl.drawingBufferWidth;
       const height = gl.drawingBufferHeight;
-      renderer.setSize(width, height);
+      // three wants a canvas, and on a phone there is none: expo-gl hands us
+      // the context directly. This stand-in carries just what three reads
+      // off a canvas. It is all expo-three ever did here, and expo-three
+      // stopped being published for current Expo versions.
+      const canvas = {
+        width,
+        height,
+        clientWidth: width,
+        clientHeight: height,
+        style: {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        getContext: () => gl,
+      };
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvas as unknown as HTMLCanvasElement,
+        context: gl,
+      });
+      renderer.setPixelRatio(1);
+      renderer.setSize(width, height, false);
       renderer.setClearColor(0xf3f0ea, 1);
 
       const three = new THREE.Scene();

@@ -44,7 +44,7 @@ export default function Home() {
       contentContainerStyle={[s.content, { paddingTop: insets.top + space(4) }]}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={s.kicker}>BRICKSNAP</Text>
+      <Text style={s.kicker}>KITSNAP</Text>
       <Text style={s.hero}>Turn any picture into a set you can actually build.</Text>
       <Text style={s.sub}>
         Photograph something. Get back a real brick model, an exact parts list

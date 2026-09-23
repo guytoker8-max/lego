@@ -14,7 +14,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 /**
  * Where the server is.
  *
- * `extra.apiUrl` is the answer, except for the case that matters most: a
+ * `EXPO_PUBLIC_API_URL` wins when set, for running against a server on this
+ * machine; otherwise `extra.apiUrl`, which is the hosted server, so the app
+ * works from Expo Go with nothing running locally.
+ *
+ * A loopback address needs one more step, for the case that matters most: a
  * phone running the app from Expo Go. There `127.0.0.1` is the phone itself,
  * so every screen reports it cannot reach Kitsnap and the fix is to edit a
  * JSON file and restart -- which is a poor first five minutes.
@@ -26,7 +30,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 function apiBase(): string {
   const configured =
-    (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://127.0.0.1:8000';
+    process.env.EXPO_PUBLIC_API_URL ??
+    (Constants.expoConfig?.extra as any)?.apiUrl ??
+    'http://127.0.0.1:8000';
   if (Platform.OS === 'web') return configured;
 
   const loopback = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0)(:|\/|$)/;

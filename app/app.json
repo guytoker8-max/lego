@@ -28,7 +28,7 @@
       "expo-router"
     ],
     "extra": {
-      "apiUrl": "http://127.0.0.1:8000"
+      "apiUrl": "https://bricksnap.onrender.com"
     },
     "web": {
       "bundler": "metro",

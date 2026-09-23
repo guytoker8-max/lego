@@ -139,7 +139,7 @@ export default function OrderScreen() {
       <Card style={{ gap: space(3) }}>
         <Text style={s.cardTitle}>Where is it going?</Text>
         <Field label="Full name" value={to.name} onChangeText={set('name')}
-               autoComplete="name" placeholder="Guy Toker" />
+               autoComplete="name" placeholder="Noa Cohen" />
         <Field label="Email" value={to.email} onChangeText={set('email')}
                autoComplete="email" keyboardType="email-address"
                autoCapitalize="none" placeholder="you@example.com" />
