@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 
 from ..config import (DETAIL_MODIFIERS, PRESETS_BY_KEY, PRIORITY_MODIFIERS,
-                      DEFAULT_PRESET, SizePreset)
+                      DEFAULT_PRESET, SizePreset, custom_preset)
 from ..library import DEFAULT_COLORS, LIBRARY
 from ..models import Analysis, BrickModel
 from .brick_generator import BrickGenerator
@@ -58,17 +58,21 @@ class BuildPipeline:
 
     # ---- the two halves --------------------------------------------------
 
-    def analyze(self, paths: list, angles: list | None = None) -> tuple:
+    def analyze(self, paths: list, angles: list | None = None,
+                category: str | None = None) -> tuple:
         """First half: look at the photos and work out what to ask."""
-        return self.analyzer.analyze(paths, angles)
+        return self.analyzer.analyze(paths, angles, category)
 
     def build(self, views: list, analysis: Analysis, answers: dict,
               progress=None) -> dict:
         """Second half: everything from the answers to a priced, valid set."""
         emit = progress or (lambda *a, **k: None)
 
-        preset = PRESETS_BY_KEY.get(answers.get("size", DEFAULT_PRESET),
-                                    PRESETS_BY_KEY[DEFAULT_PRESET])
+        if answers.get("size") == "custom" and answers.get("width_cm"):
+            preset = custom_preset(float(answers["width_cm"]))
+        else:
+            preset = PRESETS_BY_KEY.get(answers.get("size", DEFAULT_PRESET),
+                                        PRESETS_BY_KEY[DEFAULT_PRESET])
         detail = DETAIL_MODIFIERS.get(answers.get("detail", "balanced"),
                                       DETAIL_MODIFIERS["balanced"])
         priority = PRIORITY_MODIFIERS.get(answers.get("priority", "balanced"),
@@ -77,9 +81,8 @@ class BuildPipeline:
         budget = int(preset.max_pieces * detail["pieces"])
 
         emit("planning", "Planning the build...", 0.30)
-        emit("bricks", "Choosing bricks...", 0.50)
         volume, width, bricks, palette = self._fit_to_budget(
-            views, analysis, preset, budget, interpret, priority, detail)
+            views, analysis, preset, budget, interpret, priority, detail, emit)
 
         model = BrickModel(
             name=analysis.display_name or "Your Model",
@@ -96,7 +99,7 @@ class BuildPipeline:
             library=self.library,
         )
 
-        emit("validating", "Checking it can be built...", 0.70)
+        emit("validating", "Checking stability...", 0.70)
         report = self.validator.validate_and_repair(model)
         if not report.ok:
             raise UnbuildableError(
@@ -156,7 +159,8 @@ class BuildPipeline:
     # ---- sizing ----------------------------------------------------------
 
     def _fit_to_budget(self, views, analysis, preset: SizePreset, budget: int,
-                       interpret: bool, priority: dict, detail: dict):
+                       interpret: bool, priority: dict, detail: dict,
+                       emit=None):
         """Pick the stud width that lands inside the preset's piece budget.
 
         The count is *measured*, by actually laying the bricks, not predicted
@@ -174,18 +178,26 @@ class BuildPipeline:
         width = int(round(self._width_for_dimension(views[0], preset)
                           * detail["pieces"] ** (1.0 / 2.6)))
         width = max(8, width)
+        emit = emit or (lambda *a, **k: None)
         best = None
         for attempt in range(4):
+            # Each stage is reported as it starts. A retry at a smaller width
+            # repeats them, and says so, rather than inventing a percentage.
+            again = " (again, smaller)" if attempt else ""
+            emit("shape", "Understanding the shape..." + again, 0.34)
             volume = self.geometry.reconstruct(
                 views, analysis, width_studs=width, interpret_unseen=interpret)
+            emit("structure", "Building the structure..." + again, 0.40)
             volume = self.optimizer.hollow(volume, shell=priority["shell"],
                                            lattice=priority["lattice"],
                                            keep_solid=priority["solid"])
             volume, bricks, palette = self._lay_and_ground(
-                volume, preset, detail, priority)
+                volume, preset, detail, priority,
+                emit=lambda stage, msg, p: emit(stage, msg + again, p))
             # Count after repair, not before. Propping an overhang adds real
             # pieces to the box, and a budget that ignores them is a budget
             # the finished set quietly breaks.
+            emit("supports", "Adding structural supports..." + again, 0.60)
             bricks = self._repaired(bricks, volume)
             count = len(bricks)
             # Keep the largest candidate that fits the budget; if none fits,
@@ -200,14 +212,15 @@ class BuildPipeline:
         return best
 
     def _lay_and_ground(self, volume, preset, detail: dict, priority: dict,
-                        rounds: int = 8):
+                        rounds: int = 8, emit=None):
         """Tile, prop whatever came out hanging, and tile again.
 
         Two or three passes settle it: filling under a hanging brick puts
         cells where the next tiling can use them, and each pass leaves less
         hanging than the last.
         """
-        bricks, palette = self._lay_bricks(volume, preset, detail, priority)
+        bricks, palette = self._lay_bricks(volume, preset, detail, priority,
+                                           emit)
         # ``ground_bricks`` supersedes the cell-level pass: it knows the
         # footprints, so it props what actually hangs and nothing else.
         # Running both double-props, and every extra cell is extra pieces.
@@ -229,8 +242,10 @@ class BuildPipeline:
         return probe.bricks
 
     def _lay_bricks(self, volume, preset: SizePreset, detail: dict,
-                    priority: dict):
+                    priority: dict, emit=None):
         """Colours chosen and elements placed, for one candidate volume."""
+        emit = emit or (lambda *a, **k: None)
+        emit("details", "Mapping the details...", 0.45)
         n_colors = max(3, int(round(preset.colors * detail["colors"])))
         palette = DEFAULT_COLORS.reduce_to(volume.rgb[volume.solid], n_colors)
         generator = BrickGenerator(self.library, palette,
@@ -240,6 +255,7 @@ class BuildPipeline:
                                         threshold=detail["despeckle"])
         cids = self.optimizer.merge_short_runs(cids, volume.solid,
                                                threshold=detail["despeckle"] + 1.5)
+        emit("bricks", "Selecting compatible bricks...", 0.50)
         return self._tile(generator, volume, cids), palette
 
     def _width_for_dimension(self, view, preset: SizePreset) -> int:

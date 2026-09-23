@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <rect width="800" height="800" fill="#FFFFFF"/>
+  <!-- chimney -->
+  <rect x="520" y="150" width="60" height="140" fill="#8E4B32"/>
+  <rect x="510" y="140" width="80" height="24" fill="#6E3A27"/>
+  <!-- roof -->
+  <path d="M110 380 L 400 150 L 690 380 Z" fill="#C43B2E"/>
+  <rect x="100" y="370" width="600" height="26" fill="#9E2E23"/>
+  <!-- walls -->
+  <rect x="150" y="396" width="500" height="300" fill="#EEDFC2"/>
+  <!-- door -->
+  <rect x="355" y="520" width="90" height="176" rx="8" fill="#2A5CA8"/>
+  <circle cx="428" cy="610" r="7" fill="#F2C230"/>
+  <!-- windows -->
+  <rect x="195" y="450" width="110" height="100" fill="#FFFFFF"/>
+  <rect x="205" y="460" width="90" height="80" fill="#8FC3E8"/>
+  <rect x="495" y="450" width="110" height="100" fill="#FFFFFF"/>
+  <rect x="505" y="460" width="90" height="80" fill="#8FC3E8"/>
+  <!-- attic window -->
+  <circle cx="400" cy="300" r="38" fill="#FFFFFF"/>
+  <circle cx="400" cy="300" r="28" fill="#8FC3E8"/>
+  <!-- steps and base -->
+  <rect x="130" y="696" width="540" height="30" fill="#8C8C8C"/>
+  <!-- bushes -->
+  <ellipse cx="200" cy="680" rx="60" ry="42" fill="#3F8A3A"/>
+  <ellipse cx="600" cy="680" rx="60" ry="42" fill="#3F8A3A"/>
+</svg>

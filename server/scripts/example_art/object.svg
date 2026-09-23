@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <rect width="800" height="800" fill="#FFFFFF"/>
+  <!-- arms -->
+  <path d="M330 400 L 250 400 Q 220 400 220 370 L 220 260 Q 220 225 255 225 Q 290 225 290 260 L 290 345 L 330 345 Z" fill="#3E9A4B"/>
+  <path d="M470 330 L 540 330 L 540 220 Q 540 185 575 185 Q 610 185 610 220 L 610 360 Q 610 390 580 390 L 470 390 Z" fill="#3E9A4B"/>
+  <!-- trunk -->
+  <rect x="320" y="140" width="160" height="440" rx="80" fill="#4DAF5A"/>
+  <rect x="385" y="160" width="30" height="400" rx="15" fill="#3E9A4B"/>
+  <!-- flower -->
+  <circle cx="400" cy="140" r="36" fill="#E8508A"/>
+  <circle cx="400" cy="140" r="14" fill="#F7D34A"/>
+  <!-- pot -->
+  <path d="M250 560 L 550 560 L 520 760 L 280 760 Z" fill="#C8683A"/>
+  <rect x="235" y="540" width="330" height="56" rx="10" fill="#B35A30"/>
+</svg>
