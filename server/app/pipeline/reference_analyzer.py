@@ -45,8 +45,10 @@ class View:
         self.path = str(path)
         self.angle = angle
         self.rgb = imaging.load_rgb(path)
-        (self.mask, self.blob_count,
-         self.bg_refs, self.bg_tolerance) = imaging.segment_full(self.rgb)
+        cutout = imaging.cut(self.rgb)
+        self.mask, self.blob_count = cutout.mask, cutout.blobs
+        self.bg_refs, self.bg_tolerance = cutout.refs, cutout.tolerance
+        self.cut = cutout
         self.rgb, self.mask = imaging.crop_to_mask(self.rgb, self.mask)
         self.sharpness = imaging.sharpness(self.rgb)
 
@@ -120,6 +122,18 @@ class ReferenceAnalyzer:
             warnings.append(
                 "There looks to be more than one object in the photo. The "
                 "largest one was used.")
+        # How the cutout went.  A set built from a bad cutout is a lump, and
+        # the customer can only do something about it if we say so.
+        if front.cut.fallback:
+            warnings.append(
+                "Your subject and its background are close in colour, so its "
+                "outline is a best guess. A plainer background behind it "
+                "would give a much cleaner set.")
+        elif front.cut.tolerance >= imaging.BUSY_TOLERANCE:
+            warnings.append(
+                "The background of this photo is busy, so the edges of the "
+                "model may pick up some of it. A plainer background would "
+                "give a cleaner set.")
 
         return Analysis(
             subject="model",

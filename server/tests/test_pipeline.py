@@ -294,6 +294,25 @@ def test_multiple_objects_are_flagged(tmp_path, pipeline):
     assert any("more than one" in w for w in analysis.warnings)
 
 
+def test_a_photo_whose_background_cannot_be_cut_says_so(tmp_path, pipeline):
+    """The customer can retake a photo; they cannot un-build a lumpy set."""
+    img = np.full((300, 240, 3), 246, dtype=np.uint8)
+    img[90:200, 80:160] = (45, 80, 190)
+    img[:, 0:12] = (30, 140, 60)          # four unrelated colours round the
+    img[:, 228:] = (200, 170, 40)         # edge, so there is no one background
+    img[0:10, :] = (120, 40, 160)         # for the flood to follow
+    img[290:, :] = (20, 60, 200)
+    analysis, _ = pipeline.analyze([_write(tmp_path, "busy.png", img)])
+    assert any("background" in w for w in analysis.warnings), analysis.warnings
+
+
+def test_an_ordinary_photo_is_not_warned_about_its_background(tmp_path, pipeline):
+    img = np.full((300, 240, 3), 246, dtype=np.uint8)
+    img[90:200, 80:160] = (45, 80, 190)
+    analysis, _ = pipeline.analyze([_write(tmp_path, "plain.png", img)])
+    assert not any("background" in w for w in analysis.warnings), analysis.warnings
+
+
 def test_a_tiny_subject_still_produces_a_buildable_model(tmp_path, pipeline):
     img = np.full((400, 400, 3), 248, dtype=np.uint8)
     img[190:215, 190:215] = (200, 40, 30)

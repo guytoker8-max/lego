@@ -6,6 +6,8 @@ in for a flood fill and a distance transform is not worth the install.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from PIL import Image, ImageFilter
 
@@ -41,17 +43,42 @@ def subject_mask(rgb: np.ndarray, tolerance: float | None = None) -> np.ndarray:
 
 
 def segment(rgb: np.ndarray, tolerance: float | None = None) -> tuple:
-    """The subject and the blob count. See ``segment_full`` for the rest."""
-    mask, blobs, _refs, _tol = segment_full(rgb, tolerance)
-    return mask, blobs
+    """The subject and the blob count.  See ``cut`` for the rest."""
+    c = cut(rgb, tolerance)
+    return c.mask, c.blobs
 
 
 def segment_full(rgb: np.ndarray, tolerance: float | None = None) -> tuple:
+    """(mask, blobs, background refs, tolerance).  See ``cut`` for the rest."""
+    c = cut(rgb, tolerance)
+    return c.mask, c.blobs, c.refs, c.tolerance
+
+
+MIN_SUBJECT = 0.02          # below this the flood ate the subject
+MAX_SUBJECT = 0.72          # above this it never found the background
+BUSY_TOLERANCE = 28.0       # a background this varied blurs the outline
+
+
+@dataclass
+class Cutout:
+    """A subject separated from its background, and how well that went.
+
+    The numbers after the mask are what lets the rest of the pipeline be
+    honest with the customer.  A cut can be wrong in ways the mask alone does
+    not show, and a set built from a bad cut looks like a lump: better to say
+    "the background in this photo is busy" than to hand someone a mug-shaped
+    growth on their dog.
+    """
+
+    mask: np.ndarray
+    blobs: int
+    refs: np.ndarray
+    tolerance: float
+    fallback: bool = False        # the flood failed and the centre cut was used
+
+
+def cut(rgb: np.ndarray, tolerance: float | None = None) -> Cutout:
     """Separate the subject from its background.
-
-    Returns (mask, blob_count): the largest region, and how many distinct
-    regions were found before picking it.
-
 
     Photos of a *thing* almost always put the thing in the middle against a
     more uniform surround, so we flood the background inward from the border
@@ -86,12 +113,20 @@ def segment_full(rgb: np.ndarray, tolerance: float | None = None) -> tuple:
     blobs = component_count(mask)
     mask = _largest_component(mask)
 
+    # A subject that is nearly the whole frame, or nearly none of it, means the
+    # flood went wrong rather than that the photo is unusual: people leave room
+    # around the thing they are photographing.  MAX_SUBJECT is set well above
+    # any real close-up and well below the coverage a leaking flood produces.
+    fallback = False
     coverage = mask.mean()
-    if coverage < 0.02 or coverage > 0.97:
-        fallback = _close(_centre_cut(lab))
-        blobs = component_count(fallback)
-        mask = _largest_component(fallback)
-    return mask, blobs, refs, float(tolerance)
+    if coverage < MIN_SUBJECT or coverage > MAX_SUBJECT:
+        fallback = True
+        fallen = _close(_centre_cut(lab))
+        blobs = component_count(fallen)
+        mask = _largest_component(fallen)
+
+    return Cutout(mask=mask, blobs=blobs, refs=refs,
+                  tolerance=float(tolerance), fallback=fallback)
 
 
 def _background_tolerance(border_spread: np.ndarray,
@@ -381,23 +416,19 @@ def _kmeans(points: np.ndarray, k: int = 3, iters: int = 8) -> np.ndarray:
 
 
 def _flood_from_border(passable: np.ndarray) -> np.ndarray:
-    """Reachable-from-the-border set, by iterative dilation (vectorised BFS)."""
-    h, w = passable.shape
-    reached = np.zeros_like(passable)
-    reached[0, :] = passable[0, :]
-    reached[-1, :] = passable[-1, :]
-    reached[:, 0] = passable[:, 0]
-    reached[:, -1] = passable[:, -1]
-    while True:
-        grown = reached.copy()
-        grown[1:, :] |= reached[:-1, :]
-        grown[:-1, :] |= reached[1:, :]
-        grown[:, 1:] |= reached[:, :-1]
-        grown[:, :-1] |= reached[:, 1:]
-        grown &= passable
-        if grown.sum() == reached.sum():
-            return reached
-        reached = grown
+    """Everything reachable from the frame edge without leaving ``passable``.
+
+    Which is the same thing as: the connected regions of ``passable`` that
+    touch the frame edge.  Labelling answers that in one pass, where growing
+    the reached set a pixel at a time costs one pass per pixel of travel.
+    """
+    labels, _sizes = _label(passable)
+    edge = np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]])
+    touching = np.unique(edge)
+    touching = touching[touching > 0]
+    if len(touching) == 0:
+        return np.zeros_like(passable)
+    return np.isin(labels, touching)
 
 
 def _close(mask: np.ndarray, radius: int = 2) -> np.ndarray:
@@ -409,31 +440,68 @@ def _close(mask: np.ndarray, radius: int = 2) -> np.ndarray:
 
 
 def _label(mask: np.ndarray) -> tuple:
-    """Connected components, 4-connected, by repeated dilation of seeds."""
-    remaining = mask.copy()
-    labels = np.zeros(mask.shape, dtype=np.int32)
+    """Connected components, 4-connected.  Returns (labels, {label: size}).
+
+    Row runs rather than pixels: a row of a mask is a handful of intervals,
+    and two runs on neighbouring rows are the same component when they
+    overlap.  That turns labelling into a short loop over runs instead of one
+    pass per pixel of the shape's diameter, which is the difference between
+    milliseconds and seconds on a photo-sized mask.
+    """
+    h, w = mask.shape
+    labels = np.zeros((h, w), dtype=np.int32)
+    if not mask.any():
+        return labels, {}
+
+    padded = np.zeros((h, w + 2), dtype=bool)
+    padded[:, 1:-1] = mask
+    step = np.diff(padded.astype(np.int8), axis=1)
+    open_at = np.argwhere(step == 1)          # (row, first column of a run)
+    shut_at = np.argwhere(step == -1)         # (row, one past its last column)
+
+    rows = [[] for _ in range(h)]             # run index per row, in order
+    starts = open_at[:, 1]
+    ends = shut_at[:, 1]
+    for i, r in enumerate(open_at[:, 0]):
+        rows[r].append(i)
+
+    parent = list(range(len(starts)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def join(a, b):
+        ra, rb = root(a), root(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    for y in range(1, h):
+        above, here = rows[y - 1], rows[y]
+        i = j = 0
+        while i < len(above) and j < len(here):
+            a, b = above[i], here[j]
+            if starts[a] < ends[b] and starts[b] < ends[a]:
+                join(a, b)
+            if ends[a] <= ends[b]:
+                i += 1
+            else:
+                j += 1
+
+    names = {}
     sizes = {}
-    current = 0
-    while remaining.any():
-        current += 1
-        ys, xs = np.nonzero(remaining)
-        seed = np.zeros_like(remaining)
-        seed[ys[0], xs[0]] = True
-        while True:
-            grown = seed.copy()
-            grown[1:, :] |= seed[:-1, :]
-            grown[:-1, :] |= seed[1:, :]
-            grown[:, 1:] |= seed[:, :-1]
-            grown[:, :-1] |= seed[:, 1:]
-            grown &= remaining
-            if grown.sum() == seed.sum():
-                break
-            seed = grown
-        labels[seed] = current
-        sizes[current] = int(seed.sum())
-        remaining &= ~seed
-        if current > 400:            # pathological input; stop counting
-            break
+    for y in range(h):
+        for i in rows[y]:
+            r = root(i)
+            name = names.get(r)
+            if name is None:
+                name = len(names) + 1
+                names[r] = name
+                sizes[name] = 0
+            labels[y, starts[i]:ends[i]] = name
+            sizes[name] += int(ends[i] - starts[i])
     return labels, sizes
 
 
