@@ -38,6 +38,12 @@ on the machine that served the bundle instead, at the same port — so Expo Go
 works without editing anything. Point `extra.apiUrl` at a real host to
 override that.
 
+A set belongs to the install that made it. The app generates an id once, keeps
+it, and sends it with every request; the server stores it on the model and
+lists only that install's sets. It is not an account — there is nothing to
+sign into — but it is the thing an account would later attach to. A set still
+opens by its id for anyone given the link.
+
 ## What it looks like
 
 `docs/screens/` holds a shot of every screen, captured by driving the real app

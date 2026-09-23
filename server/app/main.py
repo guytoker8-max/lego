@@ -15,7 +15,7 @@ import os
 import threading
 import time
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -78,8 +78,22 @@ def get_bricks():
 # upload + analysis
 # ---------------------------------------------------------------------------
 
+CLIENT_HEADER = "x-bricksnap-client"
+
+
+def _client(request: Request) -> str:
+    """Which install is asking.
+
+    Not an identity: the app makes this up once and keeps it. It exists so a
+    set belongs to the phone that built it. Without it a shared server shows
+    every visitor everyone else's sets, which is both wrong and a leak.
+    """
+    return (request.headers.get(CLIENT_HEADER) or "").strip()[:64]
+
+
 @app.post("/api/jobs")
-async def create_job(files: list[UploadFile] = File(...),
+async def create_job(request: Request,
+                     files: list[UploadFile] = File(...),
                      angles: str = Form("")):
     """Take the photos, analyse them, and say what still needs deciding."""
     if not files:
@@ -117,7 +131,8 @@ async def create_job(files: list[UploadFile] = File(...),
 
     with _SESSION_LOCK:
         _SESSIONS[job_id] = {"analysis": analysis, "views": views,
-                             "paths": paths, "at": time.time()}
+                             "paths": paths, "at": time.time(),
+                             "owner": _client(request)}
         _sweep_sessions()
 
     job = {"id": job_id, "status": "awaiting_answers",
@@ -140,7 +155,7 @@ def get_job(job_id: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/jobs/{job_id}/build")
-def start_build(job_id: str, answers: dict = None):
+def start_build(request: Request, job_id: str, answers: dict = None):
     """Kick the build off in the background and report progress as it runs."""
     answers = answers or {}
     with _SESSION_LOCK:
@@ -189,6 +204,7 @@ def start_build(job_id: str, answers: dict = None):
             "model": result["model"], "summary": result["summary"],
             "status": "draft", "references": session["paths"],
             "thumbnail": preview_url,
+            "owner": session.get("owner") or _client(request),
         })
         STORE.save_job({"id": job_id, "status": "done", "stage": "done",
                         "message": "Your set is ready.", "progress": 1.0,
@@ -204,8 +220,14 @@ def start_build(job_id: str, answers: dict = None):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/models")
-def list_models():
-    return {"models": STORE.list_models()}
+def list_models(request: Request):
+    """The caller's own sets.
+
+    A set made before installs were told apart has no owner and is nobody's,
+    so it is not listed. Opening one by its id still works: a link someone
+    was given should not stop resolving.
+    """
+    return {"models": STORE.list_models(owner=_client(request))}
 
 
 @app.get("/api/models/{model_id}")

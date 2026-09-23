@@ -9,6 +9,7 @@
 
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Where the server is.
@@ -53,10 +54,46 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Who this install is.
+ *
+ * Not an account: no name, no email, nothing to sign into. It exists so a
+ * set belongs to the phone that made it, because without it the server has
+ * no way to tell one person's sets from another's and "My sets" shows
+ * everybody's. Attaching a real account to this id later is an addition, not
+ * a rewrite.
+ */
+const CLIENT_KEY = 'bricksnap.client';
+let clientIdPromise: Promise<string> | null = null;
+
+function newClientId(): string {
+  const g: any = globalThis as any;
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID();
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
+function clientId(): Promise<string> {
+  if (!clientIdPromise) {
+    clientIdPromise = AsyncStorage.getItem(CLIENT_KEY)
+      .then((existing) => {
+        if (existing) return existing;
+        const made = newClientId();
+        return AsyncStorage.setItem(CLIENT_KEY, made).then(() => made);
+      })
+      // Storage can be unavailable (a private browser window). A per-run id
+      // is still better than none: the session works, it just does not
+      // outlive the app.
+      .catch(() => newClientId());
+  }
+  return clientIdPromise;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const headers = new Headers(init?.headers);
+  headers.set('X-BrickSnap-Client', await clientId());
   try {
-    res = await fetch(BASE + path, init);
+    res = await fetch(BASE + path, { ...init, headers });
   } catch {
     // No status to report: the request never reached the server.
     throw new ApiError(

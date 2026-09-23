@@ -64,13 +64,17 @@ class Store:
     def load_brick_model(self, model_id: str) -> BrickModel:
         return BrickModel.from_dict(self.get_model(model_id)["model"])
 
-    def list_models(self, limit: int = 50, examples: bool = False) -> list:
+    def list_models(self, limit: int = 50, examples: bool = False,
+                    owner: str | None = None) -> list:
         """The saved models, newest first.
 
         The homepage examples live in this same store so they open as ordinary
         sets, but they are the shop's, not the customer's, and listing them
         under "My sets" alongside a set someone actually made is wrong. They
         are left out unless asked for.
+
+        With an ``owner``, only that install's sets come back. Everything on
+        one server would otherwise be listed to everybody.
         """
         out = []
         d = os.path.join(self.root, "models")
@@ -83,6 +87,8 @@ class Store:
             except (OSError, ValueError):
                 continue
             if not examples and m.get("status") == "example":
+                continue
+            if owner is not None and m.get("owner") != owner:
                 continue
             out.append({
                 "id": m.get("id"),
