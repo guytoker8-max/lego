@@ -10,8 +10,40 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-const BASE: string =
-  (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://127.0.0.1:8000';
+/**
+ * Where the server is.
+ *
+ * `extra.apiUrl` is the answer, except for the case that matters most: a
+ * phone running the app from Expo Go. There `127.0.0.1` is the phone itself,
+ * so every screen reports it cannot reach BrickSnap and the fix is to edit a
+ * JSON file and restart -- which is a poor first five minutes.
+ *
+ * Expo already tells the app which machine served the bundle, so when the
+ * configured host is a loopback one and we are not on that machine, the API
+ * is looked for on the development machine at the same port instead. An
+ * explicit LAN or public address is always left alone.
+ */
+function apiBase(): string {
+  const configured =
+    (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://127.0.0.1:8000';
+  if (Platform.OS === 'web') return configured;
+
+  const loopback = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0)(:|\/|$)/;
+  if (!loopback.test(configured)) return configured;
+
+  // "192.168.1.20:8081" while running from a development server.
+  const hostUri =
+    (Constants.expoConfig as any)?.hostUri ??
+    (Constants as any)?.expoGoConfig?.debuggerHost ??
+    '';
+  const host = String(hostUri).split('/')[0].split(':')[0];
+  if (!host || loopback.test(`http://${host}`)) return configured;
+
+  const port = configured.split(':')[2] ?? '8000';
+  return `${configured.split('://')[0]}://${host}:${port}`;
+}
+
+const BASE: string = apiBase();
 
 export class ApiError extends Error {
   status: number;

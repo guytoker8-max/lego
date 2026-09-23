@@ -32,10 +32,11 @@ npx expo start
 phone. `npx expo start --web` runs the same app in a browser, which is how the
 screenshots below were taken.
 
-The app reads the API's address from `extra.apiUrl` in `app/app.json`. On a
-physical device, change `127.0.0.1` to your machine's LAN address, or the app
-will look for the API on the phone itself and every screen will say it cannot
-reach BrickSnap.
+The app reads the API's address from `extra.apiUrl` in `app/app.json`. If that
+is a loopback address and the app is running on a phone, it looks for the API
+on the machine that served the bundle instead, at the same port — so Expo Go
+works without editing anything. Point `extra.apiUrl` at a real host to
+override that.
 
 ## What it looks like
 
