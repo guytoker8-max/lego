@@ -1,4 +1,4 @@
-# BrickSnap
+# Kitsnap
 
 Turn a photo into a brick set you can actually build.
 
@@ -7,7 +7,7 @@ dimensions, fills that shape with real LEGO-compatible elements, proves the
 result can be assembled, and hands back a 3D model, a parts list, step-by-step
 instructions and a price — all describing the same object.
 
-> BrickSnap is not affiliated with, authorised by or endorsed by The LEGO
+> Kitsnap is not affiliated with, authorised by or endorsed by The LEGO
 > Group. Sets are built from LEGO-compatible elements. The exact wording is
 > configurable in `server/app/config.py` and is served to the app, so it can
 > be changed in one place.
@@ -96,7 +96,7 @@ cd web && npm install && npm run dev
 cd web && npx vite build && cd ../server && uvicorn app.main:app --port 8000
 
 # or as one image
-docker build -t bricksnap . && docker run -p 8000:8000 -v bricksnap-data:/data bricksnap
+docker build -t kitsnap . && docker run -p 8000:8000 -v kitsnap-data:/data kitsnap
 ```
 
 The operations screen is at `/ops` (orders, supplier purchase orders, CSV

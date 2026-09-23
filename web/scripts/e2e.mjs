@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:8000';
 const photo = process.argv[3];
-const shots = process.argv[4] ?? '/tmp/bricksnap-e2e';
+const shots = process.argv[4] ?? '/tmp/kitsnap-e2e';
 mkdirSync(shots, { recursive: true });
 const gl = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const browser = await chromium.launch({ args: gl });

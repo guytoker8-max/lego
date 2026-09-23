@@ -38,8 +38,8 @@ export default function Upload() {
     if (!perm.granted) {
       setError(
         fromCamera
-          ? 'BrickSnap needs camera access to take a photo. You can enable it in Settings.'
-          : 'BrickSnap needs photo access to use a picture. You can enable it in Settings.',
+          ? 'Kitsnap needs camera access to take a photo. You can enable it in Settings.'
+          : 'Kitsnap needs photo access to use a picture. You can enable it in Settings.',
       );
       return;
     }

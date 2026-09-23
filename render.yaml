@@ -15,6 +15,6 @@ services:
       - key: BRICKSNAP_ADMIN_TOKEN
         generateValue: true
       - key: BRICKSNAP_DATA
-        value: /tmp/bricksnap
+        value: /tmp/kitsnap
       - key: BRICKSNAP_MAX_BUILDS
         value: "1"

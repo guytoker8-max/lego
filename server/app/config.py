@@ -115,10 +115,10 @@ PRIORITY_MODIFIERS = {
 class Branding:
     """Wording the app must show.  Configurable, per the brief's section 20."""
 
-    product_name: str = "BrickSnap"
+    product_name: str = "Kitsnap"
     brick_term: str = "LEGO-compatible bricks"
     disclaimer: str = (
-        "BrickSnap is not affiliated with, authorised by or endorsed by The "
+        "Kitsnap is not affiliated with, authorised by or endorsed by The "
         "LEGO Group. LEGO is a trademark of The LEGO Group, which does not "
         "sponsor or endorse this app. Sets are built from LEGO-compatible "
         "elements."

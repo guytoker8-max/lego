@@ -1,5 +1,5 @@
 /**
- * The website's view of the BrickSnap API.
+ * The website's view of the Kitsnap API.
  *
  * Every number the site shows -- pieces, centimetres, price -- comes from
  * here, and every one of them was computed on the server from the structured
@@ -169,7 +169,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(path, init);
   } catch {
-    throw new ApiError(0, "We couldn't reach BrickSnap. Check your connection and try again.");
+    throw new ApiError(0, "We couldn't reach Kitsnap. Check your connection and try again.");
   }
   const text = await res.text();
   let body: any = null;

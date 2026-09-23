@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *
  * `extra.apiUrl` is the answer, except for the case that matters most: a
  * phone running the app from Expo Go. There `127.0.0.1` is the phone itself,
- * so every screen reports it cannot reach BrickSnap and the fix is to edit a
+ * so every screen reports it cannot reach Kitsnap and the fix is to edit a
  * JSON file and restart -- which is a poor first five minutes.
  *
  * Expo already tells the app which machine served the bundle, so when the
@@ -97,7 +97,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     // No status to report: the request never reached the server.
     throw new ApiError(
-      'Could not reach BrickSnap. Check your connection and try again.',
+      'Could not reach Kitsnap. Check your connection and try again.',
       0,
     );
   }

@@ -1,9 +1,9 @@
 # The website and its API in one image: the React site is built once and
 # served by the same uvicorn process that answers /api.
 #
-#   docker build -t bricksnap .
-#   docker run -p 8000:8000 -v bricksnap-data:/data \
-#     -e BRICKSNAP_ADMIN_TOKEN=... -e BRICKSNAP_PUBLIC_URL=https://... bricksnap
+#   docker build -t kitsnap .
+#   docker run -p 8000:8000 -v kitsnap-data:/data \
+#     -e BRICKSNAP_ADMIN_TOKEN=... -e BRICKSNAP_PUBLIC_URL=https://... kitsnap
 
 FROM node:20-slim AS web
 WORKDIR /web

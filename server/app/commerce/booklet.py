@@ -149,7 +149,7 @@ def _footer(draw, model, page_no):
 
 
 def build_booklet(model: BrickModel, describe: list, parts: dict,
-                  brand: str = "BrickSnap",
+                  brand: str = "Kitsnap",
                   disclaimer: str = "") -> list:
     """The booklet as a list of page images, cover first."""
     pages = []

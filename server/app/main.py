@@ -34,7 +34,7 @@ from .storage import NotFound, Store
 
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="BrickSnap API", version="0.1.0")
+app = FastAPI(title="Kitsnap API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
     allow_headers=["*"],

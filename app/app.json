@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "BrickSnap",
-    "slug": "bricksnap",
+    "name": "Kitsnap",
+    "slug": "kitsnap",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "bricksnap",
+    "scheme": "kitsnap",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -14,8 +14,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "BrickSnap needs your photos so it can turn one into a brick model.",
-        "NSCameraUsageDescription": "BrickSnap uses the camera to photograph the thing you want built."
+        "NSPhotoLibraryUsageDescription": "Kitsnap needs your photos so it can turn one into a brick model.",
+        "NSCameraUsageDescription": "Kitsnap uses the camera to photograph the thing you want built."
       }
     },
     "android": {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the BrickSnap website on this computer: http://localhost:8000
+# Start the Kitsnap website on this computer: http://localhost:8000
 # Needs Python 3.10+ and Node.js 18+. Payments run in test mode.
 set -e
 cd "$(dirname "$0")"
@@ -11,7 +11,7 @@ python3 -m venv .venv
 pip install -q -r requirements.txt
 export BRICKSNAP_ADMIN_TOKEN="${BRICKSNAP_ADMIN_TOKEN:-admin}"
 echo
-echo "BrickSnap is running. Open http://localhost:8000 (orders screen: /ops, token: $BRICKSNAP_ADMIN_TOKEN)"
+echo "Kitsnap is running. Open http://localhost:8000 (orders screen: /ops, token: $BRICKSNAP_ADMIN_TOKEN)"
 echo "Press Ctrl+C to stop."
 ( sleep 3; (open http://localhost:8000 || xdg-open http://localhost:8000) >/dev/null 2>&1 ) &
 exec uvicorn app.main:app --port 8000

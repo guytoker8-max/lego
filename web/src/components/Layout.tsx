@@ -25,9 +25,9 @@ export default function Layout({ children }: { children: ReactNode }) {
     <>
       <header className={`header ${scrolled ? 'is-scrolled' : ''}`}>
         <div className="wrap header__inner">
-          <Link to="/" className="logo" aria-label="BrickSnap home">
+          <Link to="/" className="logo" aria-label="Kitsnap home">
             <Logo />
-            <span>{config?.brand ?? 'BrickSnap'}</span>
+            <span>{config?.brand ?? 'Kitsnap'}</span>
           </Link>
           {!inFlow && (
             <nav className="nav" aria-label="Main">
@@ -51,7 +51,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <div className="stack">
               <Link to="/" className="logo">
                 <Logo />
-                <span>{config?.brand ?? 'BrickSnap'}</span>
+                <span>{config?.brand ?? 'Kitsnap'}</span>
               </Link>
               <p className="small">Your photo, rebuilt as a real brick set, delivered with printed instructions.</p>
             </div>
@@ -68,13 +68,13 @@ export default function Layout({ children }: { children: ReactNode }) {
               <ul>
                 <li><a href="/#how">How it works</a></li>
                 <li><a href="/#faq">Questions</a></li>
-                <li><a href="mailto:hello@bricksnap.example">Contact us</a></li>
+                <li><a href="mailto:hello@kitsnap.example">Contact us</a></li>
               </ul>
             </div>
           </div>
           <div className="footer__legal">
             <p>{config?.disclaimer}</p>
-            <p style={{ marginTop: 8 }}>© {new Date().getFullYear()} {config?.brand ?? 'BrickSnap'}</p>
+            <p style={{ marginTop: 8 }}>© {new Date().getFullYear()} {config?.brand ?? 'Kitsnap'}</p>
           </div>
         </div>
       </footer>
