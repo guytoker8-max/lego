@@ -71,6 +71,9 @@ def _orders():
 ALLOWED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
 SHIP_COUNTRIES = tuple(c.strip().upper() for c in os.environ.get(
     "BRICKSNAP_SHIP_COUNTRIES", "IL").split(",") if c.strip())
+# The shipping keys checkout accepts, named once so the client can ask
+# rather than hard-coding the same two strings.
+CHECKOUT_SHIPPING = ("standard", "express")
 PUBLIC_URL = os.environ.get("BRICKSNAP_PUBLIC_URL", "").rstrip("/")
 ADMIN_TOKEN = os.environ.get("BRICKSNAP_ADMIN_TOKEN", "")
 MAX_CONCURRENT_BUILDS = int(os.environ.get("BRICKSNAP_MAX_BUILDS", "2"))
@@ -139,6 +142,9 @@ def store_config():
         "max_upload_mb": SETTINGS.max_upload_mb,
         "formats": ["image/jpeg", "image/png", "image/webp"],
         "ship_countries": list(SHIP_COUNTRIES),
+        # Which of the pricing engine's options checkout will take.
+        # The engine also quotes collection, which has no checkout.
+        "shipping_methods": list(CHECKOUT_SHIPPING),
         "payments": PAYMENTS.public(),
         "vision": bool(SETTINGS.anthropic_api_key),
     }
@@ -571,7 +577,7 @@ def checkout(body: dict, request: Request):
     if ship_to["country"] not in SHIP_COUNTRIES:
         raise HTTPException(400, "We can't ship to that country yet.")
     shipping = body.get("shipping") or "standard"
-    if shipping not in ("standard", "express"):
+    if shipping not in CHECKOUT_SHIPPING:
         raise HTTPException(400, "Pick a shipping option.")
 
     p = _pipeline()

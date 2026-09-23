@@ -44,6 +44,12 @@ lists only that install's sets. It is not an account — there is nothing to
 sign into — but it is the thing an account would later attach to. A set still
 opens by its id for anyone given the link.
 
+Ordering from the app uses the same checkout as the website: the design is
+approved by fingerprint, the server creates the payment session, and the app
+opens the provider's page. No card detail passes through the app. With no
+`STRIPE_SECRET_KEY` set, payment runs in test mode and the order page offers a
+button that marks it paid without charging anything.
+
 ## What it looks like
 
 `docs/screens/` holds a shot of every screen, captured by driving the real app

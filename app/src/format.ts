@@ -18,3 +18,20 @@ export function money(symbol: string, amount: number | string): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+/**
+ * A country code as a person would read it.
+ *
+ * "We ship to IL for now" is a line about a country nobody calls IL. Falls
+ * back to the code where the runtime has no display names, which is better
+ * than a blank.
+ */
+export function countryName(code: string): string {
+  const c = (code || '').toUpperCase();
+  try {
+    const names = new (Intl as any).DisplayNames(undefined, { type: 'region' });
+    return names.of(c) || c;
+  } catch {
+    return c;
+  }
+}

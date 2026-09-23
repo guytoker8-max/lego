@@ -3,7 +3,7 @@
 import React from 'react';
 import {
   ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View,
-  ViewStyle,
+  ViewStyle, TextInput,
 } from 'react-native';
 
 import { colors, radius, shadow, space, type } from '@/theme';
@@ -86,6 +86,29 @@ export function Stat({ label, value, tone, wide }: any) {
   );
 }
 
+export function Field({
+  label, value, onChangeText, placeholder, autoComplete, keyboardType,
+  autoCapitalize, invalid,
+}: any) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <TextInput
+        style={[s.field, invalid && { borderColor: colors.danger }]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.inkFaint}
+        autoComplete={autoComplete}
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize ?? 'words'}
+        accessibilityLabel={label}
+      />
+    </View>
+  );
+}
+
+
 export function Notice({ kind = 'info', children }: any) {
   const tint =
     kind === 'warning' ? colors.warning :
@@ -160,6 +183,12 @@ const s = StyleSheet.create({
   chipSubOn: { color: colors.brandInk, opacity: 0.75 },
 
   stat: { flex: 1, minWidth: 84 },
+  fieldLabel: { ...type.small, color: colors.inkSoft },
+  field: {
+    ...type.body, color: colors.ink, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.line, borderRadius: radius.md,
+    paddingHorizontal: space(3), paddingVertical: space(3),
+  },
   statValue: { ...type.heading, color: colors.ink },
   statLabel: { ...type.small, color: colors.inkSoft, marginTop: 2 },
 

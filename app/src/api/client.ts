@@ -196,6 +196,7 @@ export type Order = {
   id: string; status: string; status_label: string; piece_count: number;
   price: Price; tracking: { carrier?: string; number?: string };
   steps: { key: string; label: string; done: boolean }[];
+  payments?: { provider?: string; live?: boolean };
 };
 
 // ---- calls ---------------------------------------------------------------
@@ -258,6 +259,59 @@ export const listModels = () =>
                       dimensions_cm: number[]; status: string;
                       updated_at: number; thumbnail: string | null }[] }>(
     '/api/models');
+
+export type StoreConfig = {
+  brand: string; currency: string; symbol: string;
+  ship_countries: string[];
+  shipping_methods?: string[];
+  payments: { provider?: string; live?: boolean; [k: string]: any };
+};
+
+export type ShipTo = {
+  name: string; email: string; phone: string;
+  line1: string; line2: string; city: string; region: string;
+  postal_code: string; country: string;
+};
+
+export type Checkout = {
+  order_id: string; token: string; redirect_url: string;
+  test_mode: boolean; total: number;
+};
+
+/** What the shop can do: where it ships, and whether payment is for real. */
+export const getStoreConfig = () =>
+  request<StoreConfig>('/api/store/config');
+
+/**
+ * Say this design is the one to make.
+ *
+ * The server records the fingerprint it approved and refuses to take an
+ * order for anything else, which is what stops a set being edited between
+ * the price someone agreed to and the box that gets packed.
+ */
+export const approveDesign = (id: string, fingerprint: string) =>
+  request<{ approved: boolean; fingerprint: string }>(
+    `/api/store/designs/${id}/approve`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fingerprint }) });
+
+/** Start payment. No card detail passes through the app. */
+export const startCheckout = (body: {
+  model_id: string; shipping: string; name: string; email: string;
+  phone: string; address: Omit<ShipTo, 'name' | 'email' | 'phone'>;
+}) =>
+  request<Checkout>('/api/store/checkout', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+export const getStoreOrder = (id: string, token: string) =>
+  request<Order>(`/api/store/orders/${id}?token=${encodeURIComponent(token)}`);
+
+/** Only offered when the server says it is in test mode. */
+export const testPay = (id: string, token: string) =>
+  request<Order>(`/api/store/orders/${id}/test-pay?token=${encodeURIComponent(token)}`,
+                 { method: 'POST' });
 
 export type Example = {
   slug: string; title: string; caption: string; category: string;
