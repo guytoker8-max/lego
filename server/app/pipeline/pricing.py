@@ -72,12 +72,15 @@ class PricingEngine:
         }
 
     def shipping_options(self, weight_g: float) -> list:
+        # Sets ship straight from the supplier in China (4PX standard,
+        # FedEx express), so these are its transit times to Israel, not
+        # a local courier's.
         kg = max(0.3, weight_g / 1000.0)
         return [
             ShippingOption("standard", "Standard", self._round_up(18 + kg * 7),
-                           "4-7 business days"),
+                           "7-15 business days"),
             ShippingOption("express", "Express", self._round_up(38 + kg * 11),
-                           "1-2 business days"),
+                           "5-7 business days"),
             ShippingOption("pickup", "Collect in store", 0.0, "Ready when made"),
         ]
 
