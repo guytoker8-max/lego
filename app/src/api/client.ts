@@ -222,6 +222,23 @@ export const listModels = () =>
                       updated_at: number; thumbnail: string | null }[] }>(
     '/api/models');
 
+export type Example = {
+  slug: string; title: string; caption: string; category: string;
+  model_id: string; source: string; thumbnail: string;
+  piece_count: number; dimensions_cm: number[];
+};
+
+/**
+ * The sets shown on the home screen.
+ *
+ * They are real models the pipeline built, held in the same store as a
+ * customer's own set, so tapping one opens the ordinary set screen rather
+ * than a special case.
+ */
+export const getExamples = () =>
+  request<{ examples: Example[] }>('/api/store/examples')
+    .then((r) => r.examples);
+
 /** Absolute URL of a model's rendered still, for <Image source>. */
 export const previewUrl = (id: string) => `${BASE}/api/models/${id}/preview`;
 

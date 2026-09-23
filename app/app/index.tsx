@@ -14,24 +14,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Card } from '@/components/ui';
 import { colors, radius, shadow, space, type } from '@/theme';
-import { getConfig, type Config } from '@/api/client';
+import {
+  getConfig, getExamples, previewUrl, type Config, type Example,
+} from '@/api/client';
 
-const EXAMPLES = [
-  { title: 'Golden Retriever', pieces: 423, hue: '#D9A24A' },
-  { title: 'Corner Bakery', pieces: 812, hue: '#C4553F' },
-  { title: 'Red Hatchback', pieces: 356, hue: '#C0392B' },
-  { title: 'Desk Plant', pieces: 148, hue: '#3A9E4A' },
-];
+// Shown only until the real ones arrive, or if the server cannot be reached.
+// Deliberately abstract: a drawing of a dog here would be claiming a result
+// the app has not produced.
+const PLACEHOLDERS = ['#D9A24A', '#C4553F', '#C0392B', '#3A9E4A'];
 
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [config, setConfig] = useState<Config | null>(null);
+  const [examples, setExamples] = useState<Example[] | null>(null);
 
   useEffect(() => {
     // The disclaimer and the presets come from the server, so a change to
     // either reaches every install without a release.
     getConfig().then(setConfig).catch(() => setConfig(null));
+    // Real sets the pipeline built, each one openable. If the server is not
+    // there the gallery stays abstract rather than showing invented numbers.
+    getExamples().then(setExamples).catch(() => setExamples([]));
   }, []);
 
   return (
@@ -48,17 +52,39 @@ export default function Home() {
       </Text>
 
       <View style={s.gallery}>
-        {EXAMPLES.map((e) => (
-          <View key={e.title} style={s.example}>
-            <View style={[s.exampleArt, { backgroundColor: e.hue }]}>
-              <View style={s.studRow}>
-                {[0, 1, 2].map((i) => <View key={i} style={s.stud} />)}
+        {examples && examples.length
+          ? examples.slice(0, 4).map((e) => (
+              <Pressable
+                key={e.slug}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${e.title}`}
+                onPress={() => router.push({
+                  pathname: '/model/[id]', params: { id: e.model_id },
+                })}
+                style={({ pressed }) => [s.example, pressed && { opacity: 0.9 }]}
+              >
+                <Image
+                  source={{ uri: previewUrl(e.model_id) }}
+                  style={s.exampleShot}
+                  resizeMode="contain"
+                />
+                <Text style={s.exampleTitle} numberOfLines={1}>{e.title}</Text>
+                <Text style={s.examplePieces}>
+                  {e.piece_count.toLocaleString()} pieces
+                </Text>
+              </Pressable>
+            ))
+          : PLACEHOLDERS.map((hue) => (
+              <View key={hue} style={s.example}>
+                <View style={[s.exampleArt, { backgroundColor: hue }]}>
+                  <View style={s.studRow}>
+                    {[0, 1, 2].map((i) => <View key={i} style={s.stud} />)}
+                  </View>
+                </View>
+                <View style={s.placeholderLine} />
+                <View style={[s.placeholderLine, { width: '45%' }]} />
               </View>
-            </View>
-            <Text style={s.exampleTitle} numberOfLines={1}>{e.title}</Text>
-            <Text style={s.examplePieces}>{e.pieces} pieces</Text>
-          </View>
-        ))}
+            ))}
       </View>
 
       <Button label="Create Your Set" onPress={() => router.push('/upload')} />
@@ -109,6 +135,14 @@ const s = StyleSheet.create({
   stud: {
     width: 14, height: 14, borderRadius: 7,
     backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  exampleShot: {
+    height: 104, borderRadius: radius.md, marginBottom: space(3),
+    backgroundColor: colors.surfaceAlt, width: '100%',
+  },
+  placeholderLine: {
+    height: 11, borderRadius: 6, marginTop: 4,
+    backgroundColor: colors.surfaceAlt, width: '80%',
   },
   exampleTitle: { ...type.bodyStrong, color: colors.ink },
   examplePieces: { ...type.small, color: colors.inkFaint, marginTop: 1 },
