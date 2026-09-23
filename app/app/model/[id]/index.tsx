@@ -64,7 +64,15 @@ export default function ModelScreen() {
   if (!geometry || !summary || !price || !parts) return <Loading label="Opening your set" />;
 
   const [w, h, d] = summary.dimensions_cm;
-  const topColors = parts.lines.slice(0, 8);
+  // One swatch per colour, most-used first. The parts list has a line per
+  // part *and* colour, so taking its first lines showed Blue three times.
+  const byColor = new Map<number, { color_id: number; color_name: string; color_hex: string; quantity: number }>();
+  for (const l of parts.lines) {
+    const c = byColor.get(l.color_id);
+    if (c) c.quantity += l.quantity;
+    else byColor.set(l.color_id, { color_id: l.color_id, color_name: l.color_name, color_hex: l.color_hex, quantity: l.quantity });
+  }
+  const topColors = [...byColor.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 12);
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.content}
@@ -102,7 +110,7 @@ export default function ModelScreen() {
           <Text style={s.cardTitle}>Colours in this set</Text>
           <View style={s.swatches}>
             {topColors.map((l) => (
-              <View key={`${l.part_id}-${l.color_id}`} style={s.swatchItem}>
+              <View key={l.color_id} style={s.swatchItem}>
                 <Swatch hex={l.color_hex} size={26} />
                 <Text style={s.swatchName} numberOfLines={1}>{l.color_name}</Text>
               </View>
