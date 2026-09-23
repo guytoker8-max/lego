@@ -4,7 +4,7 @@
 # restart; move to a paid plan with a disk before taking real orders.
 services:
   - type: web
-    name: bricksnap
+    name: kitsnap
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
