@@ -2,9 +2,12 @@
 # Deploy: https://render.com/deploy?repo=https://github.com/guytoker8-max/lego
 # Free instances sleep after 15 idle minutes and forget their data on
 # restart; move to a paid plan with a disk before taking real orders.
+# The service keeps its first name, bricksnap: renaming it here would make
+# Render create a second service rather than rename this one. The site itself
+# says Kitsnap; change the address with a custom domain.
 services:
   - type: web
-    name: kitsnap
+    name: bricksnap
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
