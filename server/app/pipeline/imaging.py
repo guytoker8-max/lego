@@ -35,12 +35,18 @@ def sharpness(rgb: np.ndarray) -> float:
     return float(lap.var())
 
 
-def subject_mask(rgb: np.ndarray, tolerance: float = 34.0) -> np.ndarray:
+def subject_mask(rgb: np.ndarray, tolerance: float | None = None) -> np.ndarray:
     """The subject, as a single region. See ``segment`` for the blob count."""
     return segment(rgb, tolerance)[0]
 
 
-def segment(rgb: np.ndarray, tolerance: float = 34.0) -> tuple:
+def segment(rgb: np.ndarray, tolerance: float | None = None) -> tuple:
+    """The subject and the blob count. See ``segment_full`` for the rest."""
+    mask, blobs, _refs, _tol = segment_full(rgb, tolerance)
+    return mask, blobs
+
+
+def segment_full(rgb: np.ndarray, tolerance: float | None = None) -> tuple:
     """Separate the subject from its background.
 
     Returns (mask, blob_count): the largest region, and how many distinct
@@ -68,6 +74,8 @@ def segment(rgb: np.ndarray, tolerance: float = 34.0) -> tuple:
     dist = np.min(
         np.stack([np.linalg.norm(lab - r, axis=2) for r in refs], axis=0), axis=0
     )
+    if tolerance is None:
+        tolerance = _background_tolerance(dist[border])
     bg_like = dist < tolerance
     background = _flood_from_border(bg_like)
     mask = ~background
@@ -83,7 +91,26 @@ def segment(rgb: np.ndarray, tolerance: float = 34.0) -> tuple:
         fallback = _close(_centre_cut(lab))
         blobs = component_count(fallback)
         mask = _largest_component(fallback)
-    return mask, blobs
+    return mask, blobs, refs, float(tolerance)
+
+
+def _background_tolerance(border_spread: np.ndarray,
+                          low: float = 10.0, high: float = 34.0) -> float:
+    """How far from a background colour a pixel may be and still be background.
+
+    A fixed figure has to be loose enough for a background that is not one
+    flat colour, and that same looseness eats a mid-grey subject on a white
+    sweep -- grey sits about 30 Lab units from white, inside the old fixed 34,
+    so heads and stone and steel simply vanished into the background.
+
+    The border shows how uniform the background actually is, so the threshold
+    comes from its own spread: a clean sweep gets a tight cut, a busy scene
+    keeps the loose one.
+    """
+    if border_spread.size == 0:
+        return high
+    spread = float(np.percentile(border_spread, 90))
+    return float(min(high, max(low, spread * 2.0 + 6.0)))
 
 
 def component_count(mask: np.ndarray, min_fraction: float = 0.02) -> int:
@@ -174,8 +201,132 @@ def resize_mask(mask: np.ndarray, w: int, h: int, threshold: float = 0.42) -> np
 
 
 def resize_rgb(rgb: np.ndarray, w: int, h: int) -> np.ndarray:
-    return np.asarray(Image.fromarray(rgb).resize((w, h), Image.LANCZOS),
-                      dtype=np.uint8)
+    """Shrink a photo to the stud grid by majority, not by average.
+
+    Averaging is right for a photograph and wrong for this. One cell becomes
+    one brick in one moulded colour, and a cell that straddles a red panel
+    and a grey one averages to a dusty rose that is in neither -- then the
+    palette, which only has room for a dozen colours, spends one of them on
+    the seam between two others. Taking the colour most of the cell actually
+    is keeps every brick a colour the photo really contained.
+
+    Pixels are grouped coarsely to decide the majority, then averaged within
+    the winning group, so shading inside a flat area still comes through.
+    """
+    src = np.asarray(rgb, dtype=np.uint8)
+    sh, sw = src.shape[:2]
+    if sh == h and sw == w:
+        return src.copy()
+
+    rows = np.linspace(0, sh, h + 1).astype(int)
+    cols = np.linspace(0, sw, w + 1).astype(int)
+    out = np.zeros((h, w, 3), dtype=np.uint8)
+    band = (src.astype(np.int32) // 24)
+    keys_full = band[:, :, 0] * 1024 + band[:, :, 1] * 32 + band[:, :, 2]
+
+    for r in range(h):
+        r0, r1 = rows[r], max(rows[r] + 1, rows[r + 1])
+        for c in range(w):
+            c0, c1 = cols[c], max(cols[c] + 1, cols[c + 1])
+            block = src[r0:r1, c0:c1].reshape(-1, 3)
+            keys = keys_full[r0:r1, c0:c1].ravel()
+            counts = np.bincount(keys)
+            win = counts.argmax()
+            out[r, c] = block[keys == win].mean(axis=0).round()
+    return out
+
+
+def erode(mask: np.ndarray, rounds: int = 1) -> np.ndarray:
+    """Shrink a mask by one cell per round, treating off-grid as inside.
+
+    Off-grid counts as inside so a subject that runs to the edge of the frame
+    does not lose its whole border; only real outline cells are dropped.
+    """
+    out = mask.copy()
+    for _ in range(rounds):
+        e = out.copy()
+        e[1:, :] &= out[:-1, :]
+        e[:-1, :] &= out[1:, :]
+        e[:, 1:] &= out[:, :-1]
+        e[:, :-1] &= out[:, 1:]
+        out = e
+    return out
+
+
+def background_like(rgb: np.ndarray, refs, tolerance: float,
+                    factor: float = 1.25, ceiling: float = 18.0) -> np.ndarray:
+    """Cells whose colour is mostly the background behind the subject.
+
+    A cell on the outline can be under half subject and still be kept for
+    shape, and ``resize_rgb`` then gives it the colour most of it is -- which
+    for such a cell is the backdrop. Those cells are trusted for shape only,
+    and are repainted from their neighbours.
+
+    The threshold stays near the one segmentation used, deliberately. Widen it
+    and it starts eating the subject: a mid grey sits about 30 Lab units from
+    a white sweep, so a generous margin quietly turns every grey head, stone
+    and steel panel into whatever is next to it.
+    """
+    if refs is None or len(refs) == 0:
+        return np.zeros(rgb.shape[:2], dtype=bool)
+    lab = _to_lab(rgb)
+    dist = np.min(
+        np.stack([np.linalg.norm(lab - r, axis=2) for r in refs], axis=0), axis=0
+    )
+    return dist < min(ceiling, max(tolerance, tolerance * factor))
+
+
+def clean_colors(rgb: np.ndarray, trusted: np.ndarray,
+                 wanted: np.ndarray) -> np.ndarray:
+    """Give every wanted cell a colour that came from inside the subject.
+
+    Two things put background into a model otherwise. A cell on the outline
+    is part subject and part whatever was behind it, and since a column of
+    the model takes the colour of one cell, a pale rim becomes a pale wall
+    the whole way through. And a mask widened by symmetry covers cells the
+    camera never saw the subject in at all.
+
+    Callers pass the cells they trust; every other wanted cell takes the
+    nearest trusted colour instead of the pixel underneath it.
+    """
+    inner = trusted
+    if not inner.any():
+        return rgb
+
+    out = rgb.copy()
+    known = inner.copy()
+    todo = wanted & ~known
+
+    # A neighbour's colour is copied, never averaged with another's. Averaging
+    # a red cell against the grey one beside it makes a dusty pink that is in
+    # neither the photo nor the model, and the palette then spends one of its
+    # few slots on it.
+    while todo.any():
+        grew = False
+        for shift in ("up", "down", "left", "right"):
+            if not todo.any():
+                break
+            src = np.zeros_like(out)
+            has = np.zeros_like(known)
+            if shift == "up":
+                src[1:, :] = out[:-1, :]; has[1:, :] = known[:-1, :]
+            elif shift == "down":
+                src[:-1, :] = out[1:, :]; has[:-1, :] = known[1:, :]
+            elif shift == "left":
+                src[:, 1:] = out[:, :-1]; has[:, 1:] = known[:, :-1]
+            else:
+                src[:, :-1] = out[:, 1:]; has[:, :-1] = known[:, 1:]
+            fill = todo & has
+            if not fill.any():
+                continue
+            out[fill] = src[fill]
+            known = known | fill
+            todo = todo & ~fill
+            grew = True
+        if not grew:                       # nothing adjacent left to grow from
+            break
+
+    return out
 
 
 def symmetry_score(mask: np.ndarray) -> float:

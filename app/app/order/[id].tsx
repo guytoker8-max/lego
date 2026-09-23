@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Button, Card, ErrorState, Loading, Screen, Stat } from '@/components/ui';
 import { colors, radius, space, type } from '@/theme';
+import { money } from '@/format';
 import { ApiError, getOrder, type Order } from '@/api/client';
 
 export default function OrderStatus() {
@@ -41,7 +42,7 @@ export default function OrderStatus() {
       <Card style={{ gap: space(4) }}>
         <View style={s.statRow}>
           <Stat label="Pieces" value={order.piece_count.toLocaleString()} />
-          <Stat label="Paid" value={`${order.price.symbol}${order.price.total}`} />
+          <Stat label="Paid" value={money(order.price.symbol, order.price.total)} />
         </View>
       </Card>
 

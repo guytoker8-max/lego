@@ -8,7 +8,9 @@
  */
 
 import React, { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert, Image, Platform, Pressable, StyleSheet, Text, View,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 
@@ -50,12 +52,19 @@ export default function Upload() {
     }
   };
 
-  const choose = (angle: string) =>
+  // A browser has no action sheet: react-native-web's Alert never renders, so
+  // on web the tap has to go straight to the file picker or the slot is dead.
+  const choose = (angle: string) => {
+    if (Platform.OS === 'web') {
+      pick(angle, false);
+      return;
+    }
     Alert.alert('Add a photo', undefined, [
       { text: 'Take a photo', onPress: () => pick(angle, true) },
       { text: 'Choose from library', onPress: () => pick(angle, false) },
       { text: 'Cancel', style: 'cancel' },
     ]);
+  };
 
   const submit = async () => {
     const angles = SLOTS.map((s) => s.angle).filter((a) => photos[a]);

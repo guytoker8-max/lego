@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Button, Card, Chip, ErrorState, Loading, Notice, Screen, Stat } from '@/components/ui';
 import { colors, space, type } from '@/theme';
+import { money } from '@/format';
 import {
   ApiError, createOrder, getConfig, getModel, priceModel,
   type Config, type Price, type Summary,
@@ -92,19 +93,19 @@ export default function OrderScreen() {
       <Card style={{ gap: space(2) }}>
         <Text style={s.cardTitle}>What you're paying for</Text>
         <Line label={`Bricks (${summary.piece_count.toLocaleString()} pieces)`}
-              value={`${price.symbol}${b.parts}`} />
-        <Line label="Box and packing" value={`${price.symbol}${b.packaging}`} />
-        <Line label="Picking and handling" value={`${price.symbol}${b.handling}`} />
-        <Line label="VAT" value={`${price.symbol}${b.vat}`} />
-        <Line label="Shipping" value={`${price.symbol}${b.shipping}`} />
+              value={money(price.symbol, b.parts)} />
+        <Line label="Box and packing" value={money(price.symbol, b.packaging)} />
+        <Line label="Picking and handling" value={money(price.symbol, b.handling)} />
+        <Line label="VAT" value={money(price.symbol, b.vat)} />
+        <Line label="Shipping" value={money(price.symbol, b.shipping)} />
         <View style={s.divider} />
-        <Line label="Total" value={`${price.symbol}${price.total}`} strong />
+        <Line label="Total" value={money(price.symbol, price.total)} strong />
       </Card>
 
       {note ? <Notice kind="warning">{note}</Notice> : null}
       {error ? <Notice kind="error">{error}</Notice> : null}
 
-      <Button label={`Order Now · ${price.symbol}${price.total}`}
+      <Button label={`Order Now · ${money(price.symbol, price.total)}`}
               onPress={order} loading={busy} />
 
       {config ? <Text style={s.legal}>{config.branding.disclaimer}</Text> : null}

@@ -75,9 +75,9 @@ export function Chip({ label, selected, onPress, sub }: any) {
   );
 }
 
-export function Stat({ label, value, tone }: any) {
+export function Stat({ label, value, tone, wide }: any) {
   return (
-    <View style={s.stat}>
+    <View style={[s.stat, wide && { flex: 2 }]}>
       <Text style={s.statValue} numberOfLines={1}>{value}</Text>
       <Text style={[s.statLabel, tone === 'quiet' && { color: colors.inkFaint }]}>
         {label}

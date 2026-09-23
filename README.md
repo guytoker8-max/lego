@@ -28,8 +28,25 @@ npm install
 npx expo start
 ```
 
+`npx expo start` prints a QR code: scan it with Expo Go to run the app on a
+phone. `npx expo start --web` runs the same app in a browser, which is how the
+screenshots below were taken.
+
 The app reads the API's address from `extra.apiUrl` in `app/app.json`. On a
-physical device, change `127.0.0.1` to your machine's LAN address.
+physical device, change `127.0.0.1` to your machine's LAN address, or the app
+will look for the API on the phone itself and every screen will say it cannot
+reach BrickSnap.
+
+## What it looks like
+
+`docs/screens/` holds a shot of every screen, captured by driving the real app
+against the real API — no mockups. The model in them is built from a single
+photo of a toy robot.
+
+| | |
+|---|---|
+| ![Home](docs/screens/01-home.png) | ![Your set](docs/screens/08-model.png) |
+| ![Instructions](docs/screens/11-instructions.png) | ![Parts list](docs/screens/13-parts.png) |
 
 Subject recognition uses Claude vision when `ANTHROPIC_API_KEY` is set in the
 API's environment. **The key is read server side and never sent to the app.**

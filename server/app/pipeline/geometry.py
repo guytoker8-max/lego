@@ -125,8 +125,15 @@ class GeometryReconstructor:
         mask = imaging.resize_mask(front.mask, w, h)
         rgb = imaging.resize_rgb(front.rgb, w, h)
 
+        seen = mask.copy()          # where the camera actually saw the subject
         if analysis.symmetry == "left-right":
             mask = self._enforce_symmetry(mask)
+            # A cell the mirror added takes the mirror's colour. Left as is it
+            # would take whatever was behind the subject there, which is how a
+            # white studio background ends up as a wall of pink bricks.
+            mirrored = mask & ~seen & seen[:, ::-1]
+            rgb = np.where(mirrored[:, :, None], rgb[:, ::-1], rgb)
+            seen = seen | mirrored
 
         mask = self._drop_specks(mask)
         if not mask.any():                       # nothing survived the shrink
@@ -141,6 +148,10 @@ class GeometryReconstructor:
         else:
             solid = self._extrude_flat(mask)
 
+        photo = seen & mask & ~imaging.background_like(
+            rgb, getattr(front, "bg_refs", None),
+            getattr(front, "bg_tolerance", 0.0))
+        rgb = imaging.clean_colors(rgb, photo, mask)
         colors = self._colorise(solid, rgb, side)
         return Volume(solid=solid, rgb=colors)
 

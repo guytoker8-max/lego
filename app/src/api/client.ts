@@ -7,6 +7,7 @@
  * decide what a 413 means.
  */
 
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 const BASE: string =
@@ -136,15 +137,21 @@ export async function uploadPhotos(
   uris: string[], angles: string[] = [],
 ): Promise<Job> {
   const form = new FormData();
-  uris.forEach((uri, i) => {
-    const name = uri.split('/').pop() || `ref${i}.jpg`;
+  for (let i = 0; i < uris.length; i += 1) {
+    const uri = uris[i];
+    const name = (uri.split('/').pop() || `ref${i}.jpg`).split('?')[0];
     const ext = name.split('.').pop()?.toLowerCase();
-    form.append('files', {
-      uri,
-      name,
-      type: ext === 'png' ? 'image/png' : 'image/jpeg',
-    } as any);
-  });
+    const type = ext === 'png' ? 'image/png' : 'image/jpeg';
+    if (Platform.OS === 'web') {
+      // A browser's FormData only understands a Blob. React Native's
+      // {uri, name, type} shape would be stringified to "[object Object]"
+      // and the server would reject the upload as a missing file.
+      const blob = await (await fetch(uri)).blob();
+      form.append('files', blob, name);
+    } else {
+      form.append('files', { uri, name, type } as any);
+    }
+  }
   if (angles.length) form.append('angles', angles.join(','));
   return request<Job>('/api/jobs', { method: 'POST', body: form });
 }

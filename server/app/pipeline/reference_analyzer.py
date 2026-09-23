@@ -44,7 +44,8 @@ class View:
         self.path = str(path)
         self.angle = angle
         self.rgb = imaging.load_rgb(path)
-        self.mask, self.blob_count = imaging.segment(self.rgb)
+        (self.mask, self.blob_count,
+         self.bg_refs, self.bg_tolerance) = imaging.segment_full(self.rgb)
         self.rgb, self.mask = imaging.crop_to_mask(self.rgb, self.mask)
         self.sharpness = imaging.sharpness(self.rgb)
 

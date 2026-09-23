@@ -7,7 +7,10 @@
     "scheme": "bricksnap",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": { "resizeMode": "contain", "backgroundColor": "#FFCF3F" },
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FFCF3F"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -16,9 +19,20 @@
       }
     },
     "android": {
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
-    "plugins": ["expo-router"],
-    "extra": { "apiUrl": "http://127.0.0.1:8000" }
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "apiUrl": "http://127.0.0.1:8000"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
   }
 }

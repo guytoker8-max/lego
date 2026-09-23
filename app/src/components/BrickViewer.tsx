@@ -209,8 +209,12 @@ function build(geometry: Geometry, group: THREE.Group, scene: any) {
 
   const brickGeo = new THREE.BoxGeometry(1, 1, 1);
   const studGeo = new THREE.CylinderGeometry(0.30, 0.30, 0.18, 12);
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
-  const studMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // No `vertexColors` here. Per-instance colour comes from `instanceColor`,
+  // which three.js multiplies in on its own; asking for vertex colours as
+  // well makes the shader read a `color` attribute a BoxGeometry does not
+  // have, WebGL supplies (0,0,0) for it, and every brick renders black.
+  const material = new THREE.MeshLambertMaterial();
+  const studMaterial = new THREE.MeshLambertMaterial();
 
   const totalStuds = studCountFor(geometry, bricks.length);
 

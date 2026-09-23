@@ -15,6 +15,7 @@ import {
   Button, Card, Chip, ErrorState, Loading, Notice, Stat, Swatch,
 } from '@/components/ui';
 import { colors, radius, space, type } from '@/theme';
+import { money } from '@/format';
 import {
   ApiError, getConfig, getGeometry, getModel, type Config, type Geometry,
   type Parts, type Price, type Summary,
@@ -91,9 +92,9 @@ export default function ModelScreen() {
             <Stat label="Build time" value={summary.build_time.label} />
           </View>
           <View style={s.statRow}>
-            <Stat label="Size" value={`${w} × ${h} × ${d} cm`} />
+            <Stat wide label="Size (cm)" value={`${w} × ${h} × ${d}`} />
             <Stat label="Weight" value={`${Math.round(summary.weight_g)} g`} />
-            <Stat label="Est. price" value={`${price.symbol}${price.set_price}`} />
+            <Stat label="Est. price" value={money(price.symbol, price.set_price)} />
           </View>
         </Card>
 
