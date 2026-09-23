@@ -1,0 +1,20 @@
+# One-click hosting on Render: the website and its API as one Docker service.
+# Deploy: https://render.com/deploy?repo=https://github.com/guytoker8-max/lego
+# Free instances sleep after 15 idle minutes and forget their data on
+# restart; move to a paid plan with a disk before taking real orders.
+services:
+  - type: web
+    name: bricksnap
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/store/config
+    autoDeploy: true
+    envVars:
+      - key: BRICKSNAP_ADMIN_TOKEN
+        generateValue: true
+      - key: BRICKSNAP_DATA
+        value: /tmp/bricksnap
+      - key: BRICKSNAP_MAX_BUILDS
+        value: "1"

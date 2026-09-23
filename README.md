@@ -80,6 +80,9 @@ read the parts list and instructions, approve, pay and track the order. The
 exact model the customer approves (by fingerprint) is what is charged, what
 the supplier purchase order lists and what the booklet shows.
 
+To put it online in one click: [Deploy to Render](https://render.com/deploy?repo=https://github.com/guytoker8-max/lego)
+(uses `render.yaml`; free plan, sleeps when idle, data resets on restart).
+
 The quickest way to try it on your own computer (needs Python 3.10+ and
 Node.js 18+): download the repo and run `./start.sh` (Mac or Linux) or
 double-click `start.bat` (Windows). It opens http://localhost:8000.
