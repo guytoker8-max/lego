@@ -80,6 +80,10 @@ read the parts list and instructions, approve, pay and track the order. The
 exact model the customer approves (by fingerprint) is what is charged, what
 the supplier purchase order lists and what the booklet shows.
 
+The quickest way to try it on your own computer (needs Python 3.10+ and
+Node.js 18+): download the repo and run `./start.sh` (Mac or Linux) or
+double-click `start.bat` (Windows). It opens http://localhost:8000.
+
 ```bash
 # development: API on :8000, site on :5173 (proxies /api to the API)
 cd server && uvicorn app.main:app --reload --port 8000
