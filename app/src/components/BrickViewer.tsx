@@ -136,6 +136,7 @@ export default function BrickViewer({
     const total = geometry.bricks.length;
     const shown = visibleCount == null ? total : Math.max(0, Math.min(total, visibleCount));
     mesh.count = shown;
+    frameBuilt(scene, shown, total);
     if (studs) {
       // Studs are indexed separately; keep them in step with the bricks.
       studs.count = studCountFor(geometry, shown);
@@ -177,6 +178,18 @@ export default function BrickViewer({
       scene.group = group;
 
       build(geometry, group, scene);
+      // The count effect has already run by now, against a scene that had no
+      // bricks in it, so the first frame has to be set here or step one opens
+      // showing the whole finished model.
+      {
+        const total = geometry.bricks.length;
+        const shown = visibleCount == null
+          ? total : Math.max(0, Math.min(total, visibleCount));
+        scene.bricks!.count = shown;
+        if (scene.studs) scene.studs.count = studCountFor(geometry, shown);
+        applyHighlight(scene, geometry, highlightFrom, shown);
+        frameBuilt(scene, shown, total);
+      }
 
       const renderFrame = () => {
         requestAnimationFrame(renderFrame);
@@ -190,6 +203,9 @@ export default function BrickViewer({
       state.dirty = true;
       renderFrame();
     },
+    // Intentionally not re-created when the step changes: the GL context is
+    // built once and the count effect drives it from then on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [geometry, scene, state],
   );
 
@@ -232,6 +248,8 @@ function build(geometry: Geometry, group: THREE.Group, scene: any) {
 
   let studIndex = 0;
 
+  const spans: number[] = new Array(bricks.length * 6).fill(0);
+
   bricks.forEach(([partId, colorId, x, y, z, rotation], i) => {
     const part = parts[partId];
     if (!part) return;
@@ -257,8 +275,12 @@ function build(geometry: Geometry, group: THREE.Group, scene: any) {
     colour.set(hex);
     brickMesh.setColorAt(i, colour);
 
-    min.min(new THREE.Vector3(cx - sizeX / 2, cy - sizeY / 2, cz - sizeZ / 2));
-    max.max(new THREE.Vector3(cx + sizeX / 2, cy + sizeY / 2, cz + sizeZ / 2));
+    const lo = new THREE.Vector3(cx - sizeX / 2, cy - sizeY / 2, cz - sizeZ / 2);
+    const hi = new THREE.Vector3(cx + sizeX / 2, cy + sizeY / 2, cz + sizeZ / 2);
+    min.min(lo);
+    max.max(hi);
+    spans[i * 6] = lo.x; spans[i * 6 + 1] = lo.y; spans[i * 6 + 2] = lo.z;
+    spans[i * 6 + 3] = hi.x; spans[i * 6 + 4] = hi.y; spans[i * 6 + 5] = hi.z;
 
     if (part.has_studs) {
       for (let dx = 0; dx < w; dx += 1) {
@@ -291,6 +313,9 @@ function build(geometry: Geometry, group: THREE.Group, scene: any) {
   const centre = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
   scene.centre = centre;
   scene.radius = Math.max(20, min.distanceTo(max) / 2);
+  scene.spans = spans;
+  scene.fullCentre = centre.clone();
+  scene.fullRadius = scene.radius;
 }
 
 /** Studs belonging to the first `count` bricks, in the same order. */
@@ -323,6 +348,43 @@ function applyHighlight(
     }
   }
   mesh.instanceColor.needsUpdate = true;
+}
+
+/**
+ * Point the camera at the part of the model that exists yet.
+ *
+ * Framing the finished model for every step leaves the first twenty pages of
+ * a long booklet as a thumbnail in the corner of an empty box, which is the
+ * one thing a step picture must not be. The frame never goes tighter than a
+ * third of the whole model, so the early steps grow rather than jumping
+ * between wildly different zooms, and it settles on the real thing by the
+ * end.
+ */
+function frameBuilt(scene: any, shown: number, total: number) {
+  const spans: number[] | undefined = scene.spans;
+  if (!spans || !scene.fullCentre) return;
+  if (shown >= total || shown <= 0) {
+    scene.centre = scene.fullCentre.clone();
+    scene.radius = scene.fullRadius;
+    return;
+  }
+  let lx = Infinity, ly = Infinity, lz = Infinity;
+  let hx = -Infinity, hy = -Infinity, hz = -Infinity;
+  for (let i = 0; i < shown; i += 1) {
+    const o = i * 6;
+    if (spans[o] < lx) lx = spans[o];
+    if (spans[o + 1] < ly) ly = spans[o + 1];
+    if (spans[o + 2] < lz) lz = spans[o + 2];
+    if (spans[o + 3] > hx) hx = spans[o + 3];
+    if (spans[o + 4] > hy) hy = spans[o + 4];
+    if (spans[o + 5] > hz) hz = spans[o + 5];
+  }
+  if (!Number.isFinite(lx)) return;
+  const half = Math.hypot(hx - lx, hy - ly, hz - lz) / 2;
+  scene.centre = new THREE.Vector3((lx + hx) / 2, (ly + hy) / 2, (lz + hz) / 2);
+  // A quarter again, so a wide flat first layer is not clipped by the edges
+  // of the picture.
+  scene.radius = Math.max(20, half * 1.25, scene.fullRadius * 0.34);
 }
 
 function position(camera: THREE.PerspectiveCamera, scene: any, state: any) {
