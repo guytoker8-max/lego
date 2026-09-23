@@ -64,7 +64,14 @@ class Store:
     def load_brick_model(self, model_id: str) -> BrickModel:
         return BrickModel.from_dict(self.get_model(model_id)["model"])
 
-    def list_models(self, limit: int = 50) -> list:
+    def list_models(self, limit: int = 50, examples: bool = False) -> list:
+        """The saved models, newest first.
+
+        The homepage examples live in this same store so they open as ordinary
+        sets, but they are the shop's, not the customer's, and listing them
+        under "My sets" alongside a set someone actually made is wrong. They
+        are left out unless asked for.
+        """
         out = []
         d = os.path.join(self.root, "models")
         for name in os.listdir(d):
@@ -74,6 +81,8 @@ class Store:
                 with open(os.path.join(d, name)) as fh:
                     m = json.load(fh)
             except (OSError, ValueError):
+                continue
+            if not examples and m.get("status") == "example":
                 continue
             out.append({
                 "id": m.get("id"),

@@ -1,12 +1,19 @@
-/** My sets: drafts, finished models and anything ordered. */
+/**
+ * Sets.
+ *
+ * Two lists, one screen, because they are the same card: what you made, and
+ * what the shop made to show what the app does. `browse=1` picks the second.
+ */
 
 import React, { useCallback, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import {
+  Stack, useFocusEffect, useLocalSearchParams, useRouter,
+} from 'expo-router';
 
 import { Button, Card, ErrorState, Loading } from '@/components/ui';
 import { colors, radius, space, type } from '@/theme';
-import { ApiError, listModels, previewUrl } from '@/api/client';
+import { ApiError, getExamples, listModels, previewUrl } from '@/api/client';
 
 type Row = {
   id: string; name: string; piece_count: number;
@@ -16,25 +23,44 @@ type Row = {
 
 export default function MySets() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ browse?: string }>();
+  const browsing = params.browse === '1';
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setError(null);
-    listModels()
-      .then((r) => setRows(r.models as Row[]))
+    const got = browsing
+      ? getExamples().then((xs) => xs.map((x) => ({
+          id: x.model_id, name: x.title, piece_count: x.piece_count,
+          dimensions_cm: x.dimensions_cm, status: 'example', updated_at: 0,
+          thumbnail: null,
+        } as Row)))
+      : listModels().then((r) => r.models as Row[]);
+    got
+      .then(setRows)
       .catch((e) =>
         setError(e instanceof ApiError ? e.message : 'Could not load your sets.'));
-  }, []);
+  }, [browsing]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  if (error) return <View style={s.pad}><ErrorState message={error} onRetry={load} /></View>;
-  if (!rows) return <Loading label="Finding your sets" />;
+  const title = (
+    <Stack.Screen options={{ title: browsing ? 'Example sets' : 'My sets' }} />
+  );
+
+  if (error) {
+    return (
+      <View style={s.pad}>{title}
+        <ErrorState message={error} onRetry={load} />
+      </View>
+    );
+  }
+  if (!rows) return <Loading label={browsing ? 'Opening the examples' : 'Finding your sets'} />;
 
   if (!rows.length) {
     return (
-      <View style={s.pad}>
+      <View style={s.pad}>{title}
         <Card style={{ gap: space(3) }}>
           <Text style={s.emptyTitle}>Nothing here yet</Text>
           <Text style={s.emptyBody}>
@@ -49,6 +75,7 @@ export default function MySets() {
 
   return (
     <FlatList
+      ListHeaderComponent={title}
       style={s.screen}
       contentContainerStyle={s.content}
       data={rows}

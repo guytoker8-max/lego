@@ -91,7 +91,8 @@ export default function Home() {
 
       <View style={s.secondary}>
         <SecondaryAction label="My Sets" onPress={() => router.push('/sets')} />
-        <SecondaryAction label="Browse Sets" onPress={() => router.push('/sets')} />
+        <SecondaryAction label="Browse Sets"
+                         onPress={() => router.push('/sets?browse=1')} />
         <SecondaryAction label="How It Works" onPress={() => router.push('/how')} />
       </View>
 
