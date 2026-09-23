@@ -65,8 +65,14 @@ class ReferenceAnalyzer:
 
     # ---- entry point -----------------------------------------------------
 
-    def analyze(self, paths: list, angles: list | None = None) -> tuple:
-        """Return (Analysis, [View]).  Never raises on a bad photo."""
+    def analyze(self, paths: list, angles: list | None = None,
+                category: str | None = None) -> tuple:
+        """Return (Analysis, [View]).  Never raises on a bad photo.
+
+        ``category`` is what the customer said they photographed (pet,
+        vehicle, building...).  It is a hint to the vision model and, when
+        there is no vision model, the source of the depth strategy.
+        """
         angles = angles or ["front", "side", "back", "top"]
         views = []
         for i, p in enumerate(paths):
@@ -79,9 +85,10 @@ class ReferenceAnalyzer:
                 "None of the uploaded images could be read as a photo.")
 
         analysis = self._heuristic(views)
+        _apply_category(analysis, category)
         if self.api_key:
             try:
-                self._apply_vision(analysis, views)
+                self._apply_vision(analysis, views, category)
             except Exception as exc:
                 log.warning("vision analysis unavailable, using CV only: %s", exc)
                 analysis.warnings.append(
@@ -129,8 +136,9 @@ class ReferenceAnalyzer:
 
     # ---- vision ----------------------------------------------------------
 
-    def _apply_vision(self, analysis: Analysis, views: list) -> None:
-        data = self._ask_vision(views)
+    def _apply_vision(self, analysis: Analysis, views: list,
+                      category: str | None = None) -> None:
+        data = self._ask_vision(views, category)
         analysis.subject = data.get("subject", analysis.subject)
         analysis.display_name = data.get("display_name") or analysis.display_name
         analysis.description = data.get("description", "")
@@ -148,8 +156,9 @@ class ReferenceAnalyzer:
         analysis.warnings.extend(data.get("warnings", []) or [])
         analysis.source = "vision"
 
-    def _ask_vision(self, views: list) -> dict:
+    def _ask_vision(self, views: list, category: str | None = None) -> dict:
         import httpx
+        from ..config import CATEGORY_STRATEGIES
 
         content = []
         for v in views[:4]:
@@ -157,7 +166,13 @@ class ReferenceAnalyzer:
             content.append({"type": "image", "source": {
                 "type": "base64", "media_type": "image/jpeg",
                 "data": _as_jpeg_b64(v.rgb)}})
-        content.append({"type": "text", "text": _PROMPT})
+        hint = CATEGORY_STRATEGIES.get(category or "", {}).get("hint")
+        prompt = _PROMPT
+        if hint:
+            prompt += ("\n\nThe customer says the subject is %s. Use that to "
+                       "judge the unseen depth, but trust the photo if it "
+                       "clearly shows something else." % hint)
+        content.append({"type": "text", "text": prompt})
 
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
@@ -214,6 +229,27 @@ class ReferenceAnalyzer:
                 ],
             })
         return qs
+
+
+def _apply_category(analysis: Analysis, category: str | None) -> None:
+    """Steer a photo-only analysis by what the customer says it shows.
+
+    Only the reconstruction strategy changes: how deep the unseen side is,
+    and how rounded.  The silhouette, its symmetry and the
+    colours still come from the photo, so the category cannot make the model
+    something the photo is not.
+    """
+    from ..config import CATEGORY_STRATEGIES
+    strategy = CATEGORY_STRATEGIES.get(category or "")
+    if not strategy:
+        return
+    if strategy.get("depth_profile"):
+        analysis.depth_profile = strategy["depth_profile"]
+    if strategy.get("depth_ratio"):
+        analysis.depth_ratio = strategy["depth_ratio"]
+    if category != "other":
+        analysis.subject = category
+        analysis.display_name = "Your %s" % strategy["label"]
 
 
 class NoUsableReferenceError(ValueError):

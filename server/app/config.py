@@ -40,6 +40,53 @@ SIZE_PRESETS = (
 PRESETS_BY_KEY = {p.key: p for p in SIZE_PRESETS}
 DEFAULT_PRESET = "medium"
 
+# Custom sizes are asked for as a width in centimetres.  The width is a
+# target, not a promise: the builder still measures what it lays and the
+# model reports the dimensions it actually has.
+CUSTOM_WIDTHS_CM = (10, 20, 30, 40)
+CUSTOM_MIN_CM, CUSTOM_MAX_CM = 8.0, 48.0
+
+
+def custom_preset(width_cm: float) -> SizePreset:
+    """A size preset for "about this wide", scaled from Medium.
+
+    Piece count grows with roughly the 2.6th power of the width (the same
+    exponent the builder uses to correct itself), so the budget follows the
+    width instead of being a fixed number that a 40 cm model would blow.
+    """
+    from .library.bricks import STUD_MM
+    cm = min(CUSTOM_MAX_CM, max(CUSTOM_MIN_CM, float(width_cm)))
+    studs = max(8, int(round(cm * 10.0 / STUD_MM)))
+    base = PRESETS_BY_KEY["medium"]
+    budget = int(base.max_pieces * (studs / float(base.width_studs)) ** 2.6)
+    colors = 8 if cm <= 12 else 12 if cm <= 24 else 16
+    return SizePreset("custom", "Custom (%g cm)" % cm, studs,
+                      max(150, min(budget, 7000)),
+                      # Width is what was asked for; height follows the
+                      # subject's proportions, so it is not what binds.
+                      cm * 3.0, colors, "balanced")
+
+
+# What the customer says they are photographing, and how that steers the
+# reconstruction.  A vision model, when configured, judges depth itself and
+# gets the category only as a hint; without one, the category is the best
+# information there is about how deep the unseen side should be.
+CATEGORY_STRATEGIES = {
+    "pet":       {"label": "Pet", "depth_profile": "rounded", "depth_ratio": 0.45,
+                  "hint": "an animal, usually a pet; keep the head, ears and tail readable"},
+    "person":    {"label": "Person", "depth_profile": "rounded", "depth_ratio": 0.35,
+                  "hint": "a person; favour a clear face and pose over background"},
+    "vehicle":   {"label": "Vehicle", "depth_profile": "boxy", "depth_ratio": 0.45,
+                  "hint": "a vehicle; keep wheels and body lines, sides are parallel"},
+    "building":  {"label": "Building", "depth_profile": "boxy", "depth_ratio": 0.7,
+                  "hint": "a building; walls are flat and vertical, roof lines matter"},
+    "object":    {"label": "Object", "depth_profile": "rounded", "depth_ratio": 0.6,
+                  "hint": "an everyday object"},
+    "character": {"label": "Character", "depth_profile": "rounded", "depth_ratio": 0.4,
+                  "hint": "a character or figure; exaggerated head, bold colours"},
+    "other":     {"label": "Other", "depth_profile": None, "depth_ratio": None, "hint": ""},
+}
+
 # How the detail answer moves the palette and the piece budget.
 DETAIL_MODIFIERS = {
     "simple":   {"colors": 0.6, "pieces": 0.7, "despeckle": 11.0},

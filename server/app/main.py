@@ -41,6 +41,10 @@ app.add_middleware(
 )
 
 STORE = Store(SETTINGS.data_dir)
+# Supplier adapters first: the pricing engine inside the pipeline picks its
+# supplier from the registry when it is built.
+from . import suppliers as _suppliers  # noqa: E402
+_suppliers.configure(SETTINGS.data_dir)
 PIPELINE = BuildPipeline(api_key=SETTINGS.anthropic_api_key or None)
 ORDERS = OrderService(STORE, supplier_key=SETTINGS.supplier)
 EDITOR = ModelEditor(api_key=SETTINGS.anthropic_api_key or None)
@@ -427,15 +431,21 @@ def create_order(body: dict):
 
 @app.get("/api/orders")
 def list_orders():
-    return {"orders": STORE.list_orders()}
+    # Web-store orders carry a customer's address and are only readable with
+    # their own link (see storefront.py), so they are not listed here.
+    return {"orders": [o for o in STORE.list_orders()
+                       if not o.get("access_token")]}
 
 
 @app.get("/api/orders/{order_id}")
 def get_order(order_id: str):
     try:
-        return STORE.get_order(order_id).to_dict()
+        order = STORE.get_order(order_id)
     except NotFound:
         raise HTTPException(404, "No such order.") from None
+    if order.access_token:
+        raise HTTPException(404, "No such order.")
+    return order.to_dict()
 
 
 @app.post("/api/orders/{order_id}/status")
@@ -445,6 +455,9 @@ def advance_order(order_id: str, body: dict):
     if status not in STATUSES:
         raise HTTPException(400, "Status must be one of: %s" % ", ".join(STATUSES))
     try:
+        if STORE.get_order(order_id).access_token:
+            # Web orders move with their supplier, via /api/admin.
+            raise HTTPException(404, "No such order.")
         return ORDERS.advance(order_id, status).to_dict()
     except NotFound:
         raise HTTPException(404, "No such order.") from None
@@ -488,3 +501,16 @@ def handle_not_found(request, exc):
 def health():
     return {"ok": True, "vision": bool(SETTINGS.anthropic_api_key),
             "parts": len(LIBRARY.all())}
+
+
+# ---------------------------------------------------------------------------
+# the web store: same engine, same store, its own routes (storefront.py)
+# ---------------------------------------------------------------------------
+
+from . import storefront  # noqa: E402
+from .examples import install_examples  # noqa: E402
+
+storefront.bind(STORE, PIPELINE, ORDERS)
+app.include_router(storefront.router)
+install_examples(STORE)
+storefront.mount_web(app)       # last: it answers every path nothing else did
