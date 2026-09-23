@@ -16,7 +16,8 @@ from .base import (SUPPLIER_STATUSES, Capabilities, InventoryLevel,
                    SupplierNotConfigured, SupplierOrderRequest,
                    SupplierOrderResult, SupplierProduct, Tracking)
 from .bricklink import BrickLinkReference
-from .ledger import PurchaseOrderLedger, purchase_order_csv
+from .ledger import (PurchaseOrderLedger, purchase_order_bricklink_xml,
+                     purchase_order_csv)
 from .manual import ManualFulfilment, house_sku
 from .pricelist import PriceListSupplier
 from .profiles import PROFILES
@@ -57,6 +58,7 @@ def get_adapter(key: str | None = None) -> SupplierAdapter:
 
 __all__ = [
     "configure", "adapters", "get_adapter", "LEDGER", "purchase_order_csv",
+    "purchase_order_bricklink_xml",
     "house_sku", "SupplierAdapter", "Capabilities", "ShipTo",
     "SupplierOrderRequest", "SupplierOrderResult", "SupplierProduct",
     "InventoryLevel", "Tracking", "NotSupportedBySupplier",

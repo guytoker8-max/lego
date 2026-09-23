@@ -35,7 +35,7 @@ const FLOW = [
 
 const FAQ = [
   ['Is the preview what I actually get?', 'Yes. The preview is not a picture of a set, it is the set: every brick drawn on screen is a real piece on your parts list, in the position the instructions put it. The price is calculated from that same parts list.'],
-  ['What kind of bricks are they?', 'Standard LEGO-compatible bricks, plates and tiles in the common sizes and colours, so they work with bricks you already have. They are not made by the LEGO Group.'],
+  ['What kind of bricks are they?', 'Standard bricks, plates and tiles in the common sizes and colours, compatible with LEGO® bricks, so they work with bricks you already have. They are compatible bricks, not made or endorsed by the LEGO Group.'],
   ['What photos work best?', 'A clear, well-lit photo with the subject filling most of the frame and a plain background. Two or more photos from different angles (front and side) give the most accurate 3D shape.'],
   ['Can it really stand up?', 'Every set is checked before you see it: each piece must clip onto the one below, the whole model must be buildable from the bottom up, and it must balance. Where something would overhang, hidden support bricks are added and shown in the parts list.'],
   ['How long does delivery take?', 'Parts are picked and packed to order, usually within about a week, then shipped with tracking. You will see the exact shipping options and costs before you pay.'],

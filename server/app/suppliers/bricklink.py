@@ -66,9 +66,11 @@ class BrickLinkReference(SupplierAdapter):
         api="catalog", orders_via="portal", dropship=None, blind_ship=None,
         prints_booklet=False, moq_pieces=None, regions=("worldwide",),
         lead_time_days=None, part_numbering="bricklink", status="research",
-        notes=("The API is for sellers: catalogue, price guide and orders a "
-               "store receives. It cannot place a purchase, so it is used for "
-               "prices only."),
+        notes=("The API is for sellers. It covers the catalogue, the price "
+               "guide and orders; with direction=out it can list purchases "
+               "we made, but it has no call that creates an order or a cart. "
+               "Used for reference prices only. Parts are genuine LEGO and "
+               "arrive from several stores."),
     )
 
     def __init__(self, client=None):

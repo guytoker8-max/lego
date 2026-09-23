@@ -60,6 +60,52 @@ export BRICKSNAP_DATA=./data           # where models and orders are kept
 export BRICKSNAP_SUPPLIER=compatible   # which supplier to quote against
 ```
 
+## The website (web store)
+
+`web/` is the customer-facing store built on the same engine: upload photos,
+pick a subject and size, watch the real build stages, turn the 3D model,
+read the parts list and instructions, approve, pay and track the order. The
+exact model the customer approves (by fingerprint) is what is charged, what
+the supplier purchase order lists and what the booklet shows.
+
+```bash
+# development: API on :8000, site on :5173 (proxies /api to the API)
+cd server && uvicorn app.main:app --reload --port 8000
+cd web && npm install && npm run dev
+
+# one process: build the site, then the API serves it on :8000
+cd web && npx vite build && cd ../server && uvicorn app.main:app --port 8000
+
+# or as one image
+docker build -t bricksnap . && docker run -p 8000:8000 -v bricksnap-data:/data bricksnap
+```
+
+The operations screen is at `/ops` (orders, supplier purchase orders, CSV
+and BrickLink XML downloads, status changes and refunds).
+
+| Variable | Default | What it does |
+|---|---|---|
+| `BRICKSNAP_PUBLIC_URL` | request host | Base URL for payment redirects and booklet links |
+| `BRICKSNAP_ADMIN_TOKEN` | unset (ops locked) | Token for `/ops` and `/api/admin/*` |
+| `STRIPE_SECRET_KEY` | unset: test payments | Stripe Checkout; without it a test "pay" page is used and nothing is charged |
+| `STRIPE_WEBHOOK_SECRET` | unset | Verifies `/api/store/webhooks/stripe` |
+| `BRICKSNAP_SHIP_COUNTRIES` | `IL` | Comma-separated ISO codes checkout accepts |
+| `BRICKSNAP_SUPPLIER` | `compatible` | Which supplier quotes and receives orders |
+| `BRICKSNAP_PRICELIST_WOBRICK` / `_BRICKWITH` / `_MARSTOY` | unset | CSV price list (`design_id,color_id,supplier_sku,unit_cost[,stock]`) that turns that supplier on |
+| `BRICKSNAP_FX_USD_ILS` | `3.7` | Exchange rate for USD price lists |
+| `BRICKLINK_CONSUMER_KEY` etc. | unset | BrickLink price reference only (it cannot place orders) |
+| `BRICKSNAP_MAX_BUILDS` / `BRICKSNAP_BUILDS_PER_HOUR` | `2` / `20` | Concurrent builds, and builds per visitor per hour |
+
+Prices are in ILS with VAT. No supplier has an ordering API (see
+`docs/SUPPLIER_RESEARCH.md`), so a paid order writes a purchase order that a
+person sends by email or portal; the ops screen then moves it along and the
+customer's order page follows.
+
+For a live deployment: set `BRICKSNAP_PUBLIC_URL`, `BRICKSNAP_ADMIN_TOKEN`
+and the Stripe keys, point the Stripe webhook at
+`/api/store/webhooks/stripe`, keep `/data` on a persistent volume, and put
+it behind HTTPS.
+
 ## How a photo becomes a set
 
 Each stage is a separate module. None of them is a prompt: the vision model
@@ -167,7 +213,7 @@ fits. "Small" therefore means small.
 ## Testing
 
 ```bash
-cd server && python -m pytest tests/ -q     # 44 tests
+cd server && python -m pytest tests/ -q     # 64 tests
 cd app && npx tsc --noEmit                  # typecheck
 ```
 
@@ -193,11 +239,12 @@ multiple reference photos are supported end to end. What is left:
 
 Phase 4 has its seams in place but is not finished:
 
-- **Payment is not connected.** `PaymentProvider` is an interface with a
-  deferred stub behind it. No card detail is accepted anywhere in the app.
-- **Fulfilment is not contracted.** Of the three supplier routes, only
-  LEGO-compatible third-party bricks is wired up; the other two raise
-  `SupplierNotConfigured` rather than pretending.
+- **Payment** is connected on the website (Stripe Checkout, or test
+  payments when no key is set). The Expo app does not take payment.
+- **Fulfilment is not contracted.** The website's orders go to the built-in
+  compatible-brick route as purchase orders. Wobrick, Brickwith and Marstoy
+  are wired in as price-list suppliers and switch on when their price list
+  is loaded; no supplier has been contacted.
 
 ## Known limitations
 

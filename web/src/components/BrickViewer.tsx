@@ -66,8 +66,9 @@ export default function BrickViewer({
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    // Neutral keeps brick colours true to the palette; ACES washes them out.
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     el.appendChild(renderer.domElement);
@@ -76,6 +77,7 @@ export default function BrickViewer({
     if (background) scene.background = new THREE.Color(background);
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.45;
 
     // ---- bricks, in build order ---------------------------------------
     const order: number[] = [];
@@ -148,8 +150,8 @@ export default function BrickViewer({
     scene.add(bodies, studs);
 
     // ---- light, ground, camera ----------------------------------------
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xd9d2c5, 0.7));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xd9d2c5, 0.45));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
     const span = Math.max(sx * STUD, sz * STUD, height);
     sun.position.set(span * 0.8, span * 1.6, span * 1.1);
     sun.castShadow = true;
@@ -174,7 +176,9 @@ export default function BrickViewer({
     const camera = new THREE.PerspectiveCamera(32, 1, 1, span * 20);
     const target = new THREE.Vector3(0, height * 0.45, 0);
     const dist = span * 2.3;
-    camera.position.set(dist * 0.62, height * 0.55 + dist * 0.38, dist * 0.78);
+    // A three-quarter view that favours the front, which is the side the
+    // photo showed.
+    camera.position.set(dist * 0.48, height * 0.5 + dist * 0.34, dist * 0.86);
     camera.lookAt(target);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -192,6 +196,7 @@ export default function BrickViewer({
     renderer.domElement.style.touchAction = interactive ? 'pan-y' : 'auto';
 
     // ---- step display ---------------------------------------------------
+    let dirty = true;
     const fadeTo = new THREE.Color(background ?? '#f4efe6');
     const apply = (s: number | null) => {
       const visible = s === null || s <= 0 || s > stepEnds.length ? order.length : stepEnds[s - 1];
@@ -214,6 +219,7 @@ export default function BrickViewer({
       studs.count = visibleStuds;
       if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
       if (studs.instanceColor) studs.instanceColor.needsUpdate = true;
+      dirty = true;
     };
     apply(step);
 
@@ -226,6 +232,7 @@ export default function BrickViewer({
       renderer.domElement.style.height = '100%';
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      dirty = true;
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -234,10 +241,16 @@ export default function BrickViewer({
     let frame = 0;
     let running2 = true;
     let first = true;
+    // Draw only when something changed: the camera moved (dragging, damping,
+    // auto-rotation), the step changed, or the canvas was resized. A still
+    // model costs nothing, which matters on a phone's battery.
     const loop = () => {
       if (!running2) return;
-      controls.update();
-      renderer.render(scene, camera);
+      const moved = controls.update();
+      if (moved || dirty || first) {
+        renderer.render(scene, camera);
+        dirty = false;
+      }
       if (first) {
         first = false;
         onReady?.();

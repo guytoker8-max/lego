@@ -229,7 +229,7 @@ export default function DesignPage() {
                 <div className="stack" style={{ gap: 4 }}>
                   <h3>Exactly what's in the box</h3>
                   <p className="muted small">
-                    {s.piece_count.toLocaleString()} LEGO-compatible pieces in {design.parts.length} part and colour
+                    {s.piece_count.toLocaleString()} compatible pieces in {design.parts.length} part and colour
                     combinations, counted from the model itself.
                   </p>
                 </div>
