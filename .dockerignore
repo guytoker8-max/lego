@@ -1,0 +1,8 @@
+**/node_modules
+**/__pycache__
+**/*.pyc
+server/data
+web/dist
+app
+.git
+*.log

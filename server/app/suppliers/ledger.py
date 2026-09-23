@@ -19,8 +19,10 @@ import json
 import os
 import threading
 import time
+from xml.sax.saxutils import escape
 
 from .base import SUPPLIER_STATUSES
+from .colors import bricklink_color
 
 
 class PurchaseOrderLedger:
@@ -85,3 +87,32 @@ def purchase_order_csv(po: dict) -> str:
         w.writerow([l.get("supplier_sku", ""), l["part_id"], l["part_name"],
                     l["color_name"], l["color_id"], l["quantity"]])
     return buf.getvalue()
+
+
+def purchase_order_bricklink_xml(po: dict) -> str:
+    """The lines as a BrickLink wanted-list XML.
+
+    It is the one parts-list format every supplier in the research accepts
+    (Wobrick, Brickwith and the marketplaces), so it is what gets attached
+    to the email or uploaded to the portal.  Colours are BrickLink's; a
+    colour with no known mapping is left out of COLOR and named in REMARKS
+    so the person sending it can fix it by hand.
+    """
+    out = ["<INVENTORY>"]
+    for l in po.get("lines", []):
+        bl = bricklink_color(int(l["color_id"]))
+        item = ["<ITEM>", "<ITEMTYPE>P</ITEMTYPE>",
+                "<ITEMID>%s</ITEMID>" % escape(str(l["part_id"]))]
+        if bl is not None:
+            item.append("<COLOR>%d</COLOR>" % bl)
+        item.append("<MINQTY>%d</MINQTY>" % int(l["quantity"]))
+        remark = l.get("supplier_sku") or ""
+        if bl is None:
+            remark = ("%s colour: %s (LDraw %s)" % (
+                remark, l.get("color_name", ""), l["color_id"])).strip()
+        if remark:
+            item.append("<REMARKS>%s</REMARKS>" % escape(remark))
+        item.append("</ITEM>")
+        out.append("".join(item))
+    out.append("</INVENTORY>")
+    return "\n".join(out) + "\n"

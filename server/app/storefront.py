@@ -807,6 +807,17 @@ def admin_po_csv(reference: str, x_admin_token: str = Header("")):
                              media_type="text/csv")
 
 
+@router.get("/api/admin/purchase-orders/{reference}.xml")
+def admin_po_xml(reference: str, x_admin_token: str = Header("")):
+    _admin(x_admin_token)
+    from . import suppliers
+    po = suppliers.LEDGER.get(reference)
+    if not po:
+        raise HTTPException(404, "No such purchase order.")
+    return PlainTextResponse(suppliers.purchase_order_bricklink_xml(po),
+                             media_type="application/xml")
+
+
 @router.post("/api/admin/purchase-orders/{reference}/status")
 def admin_po_status(reference: str, body: dict, x_admin_token: str = Header("")):
     _admin(x_admin_token)

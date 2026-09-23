@@ -83,13 +83,13 @@ export default function Ops() {
     }
   };
 
-  const downloadCsv = async (ref: string) => {
-    const res = await fetch(`/api/admin/purchase-orders/${ref}.csv`, { headers: { 'X-Admin-Token': token } });
+  const download = async (ref: string, ext: 'csv' | 'xml') => {
+    const res = await fetch(`/api/admin/purchase-orders/${ref}.${ext}`, { headers: { 'X-Admin-Token': token } });
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${ref}.csv`;
+    a.download = `${ref}.${ext}`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -151,7 +151,8 @@ export default function Ops() {
                     </select>
                   </td>
                   <td className="small">
-                    <button className="link" onClick={() => downloadCsv(p.reference)}>CSV</button>{' · '}
+                    <button className="link" onClick={() => download(p.reference, 'csv')}>CSV</button>{' · '}
+                    <button className="link" onClick={() => download(p.reference, 'xml')} title="BrickLink XML, the format the suppliers accept">XML</button>{' · '}
                     <a href={p.booklet_url} target="_blank" rel="noreferrer">Booklet</a>
                   </td>
                 </tr>
